@@ -2,6 +2,8 @@
 
 ChatGPT/Codex, Claude, Gemini 구독 계정의 현재 한도와 리셋 시간을 보여주는 네이티브 macOS 메뉴바 앱입니다.
 
+각 서비스 카드는 실제 OpenAI, Claude, Gemini 벡터 심볼을 사용합니다. 상표는 각 소유자에게 있으며 UsageBar와의 제휴나 보증을 의미하지 않습니다. 아이콘 출처와 라이선스는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인해 주세요.
+
 ## 지원 범위
 
 | 공급자 | 표시 항목 | 인증 |

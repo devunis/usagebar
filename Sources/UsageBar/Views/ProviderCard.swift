@@ -10,11 +10,7 @@ struct ProviderCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(kind.shortName)
-                    .font(.caption.bold())
-                    .foregroundStyle(.white)
-                    .frame(width: 25, height: 25)
-                    .background(kind.color.gradient, in: RoundedRectangle(cornerRadius: 7))
+                ProviderBrandMark(kind: kind)
 
                 Text(kind.name)
                     .font(.headline)

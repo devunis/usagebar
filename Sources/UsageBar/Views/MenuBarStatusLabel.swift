@@ -1,40 +1,74 @@
+import AppKit
 import SwiftUI
+
+struct MenuBarStatusSegment: Equatable {
+    let summary: MenuBarUsageSummary
+    let filledCount: Int
+    let emptyCount: Int
+    let percentText: String
+}
+
+func makeMenuBarStatusSegments(
+    from summaries: [MenuBarUsageSummary]
+) -> [MenuBarStatusSegment] {
+    summaries.map { summary in
+        let filledCount = min(5, max(0, Int((summary.usedPercent / 20).rounded())))
+        return MenuBarStatusSegment(
+            summary: summary,
+            filledCount: filledCount,
+            emptyCount: 5 - filledCount,
+            percentText: "\(Int(summary.usedPercent.rounded()))%"
+        )
+    }
+}
 
 struct MenuBarStatusLabel: View {
     @ObservedObject var store: UsageStore
 
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "chart.bar.xaxis")
-
-            ForEach(store.menuBarUsageSummaries) { summary in
-                HStack(spacing: 3) {
-                    ProviderBrandMark(kind: summary.provider, size: 13, compact: true)
-
-                    if store.menuBarDisplayStyle.showsBar {
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(.primary.opacity(0.18))
-                                .frame(width: 30, height: 5)
-                            Capsule()
-                                .fill(barColor(for: summary))
-                                .frame(
-                                    width: 30 * summary.usedPercent / 100,
-                                    height: 5
-                                )
-                        }
-                    }
-
-                    if store.menuBarDisplayStyle.showsPercent {
-                        Text("\(Int(summary.usedPercent.rounded()))%")
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .monospacedDigit()
-                    }
-                }
-            }
-        }
+        statusText
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
+    }
+
+    private var statusText: Text {
+        let segments = makeMenuBarStatusSegments(from: store.menuBarUsageSummaries)
+        guard !segments.isEmpty else {
+            return Text(Image(systemName: "chart.bar.xaxis"))
+        }
+
+        return segments.enumerated().reduce(Text("")) { result, element in
+            let (index, status) = element
+            let summary = status.summary
+            var segment = index == 0 ? Text("") : Text("  ")
+
+            if let mark = brandMark(for: summary.provider) {
+                segment = segment + Text(Image(nsImage: mark))
+            } else {
+                segment = segment + Text(summary.provider.shortName)
+            }
+
+            if store.menuBarDisplayStyle.showsBar {
+                segment = segment
+                    + Text(" ")
+                    + Text(String(repeating: "▰", count: status.filledCount))
+                        .foregroundColor(barColor(for: summary))
+                    + Text(String(repeating: "▱", count: status.emptyCount))
+                        .foregroundColor(.primary.opacity(0.28))
+            }
+
+            if store.menuBarDisplayStyle.showsPercent {
+                segment = segment
+                    + Text(" ")
+                    + Text(status.percentText)
+            }
+
+            return result + segment
+        }
     }
 
     private var accessibilityText: String {
@@ -45,6 +79,49 @@ struct MenuBarStatusLabel: View {
         return summaries.map {
             "\($0.provider.name) \($0.title) \(Int($0.usedPercent.rounded()))퍼센트 사용"
         }.joined(separator: ", ")
+    }
+
+    private func brandMark(for kind: ProviderKind) -> NSImage? {
+        guard let resources = Bundle.main.resourceURL else { return nil }
+        let assetName = switch kind {
+        case .codex: "openai"
+        case .anthropic: "claude"
+        case .gemini: "gemini"
+        }
+        let url = resources
+            .appendingPathComponent("BrandMarks", isDirectory: true)
+            .appendingPathComponent("\(assetName).svg")
+        guard let source = NSImage(contentsOf: url) else { return nil }
+
+        let size = NSSize(width: 13, height: 13)
+        let result = NSImage(size: size)
+        result.lockFocus()
+        brandBackground(for: kind).setFill()
+        NSBezierPath(
+            roundedRect: NSRect(origin: .zero, size: size),
+            xRadius: 3,
+            yRadius: 3
+        ).fill()
+        source.draw(
+            in: NSRect(x: 2.5, y: 2.5, width: 8, height: 8),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1
+        )
+        result.unlockFocus()
+        result.isTemplate = false
+        return result
+    }
+
+    private func brandBackground(for kind: ProviderKind) -> NSColor {
+        switch kind {
+        case .codex:
+            .white
+        case .anthropic:
+            NSColor(srgbRed: 1, green: 0.96, blue: 0.91, alpha: 1)
+        case .gemini:
+            NSColor(srgbRed: 0.95, green: 0.97, blue: 1, alpha: 1)
+        }
     }
 
     private func barColor(for summary: MenuBarUsageSummary) -> Color {

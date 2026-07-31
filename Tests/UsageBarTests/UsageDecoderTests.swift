@@ -101,4 +101,34 @@ final class UsageDecoderTests: XCTestCase {
         XCTAssertEqual(windowTitle(300), "5시간")
         XCTAssertEqual(windowTitle(60), "1시간")
     }
+
+    func testMenuBarBuildsAllRequestedUsageSegments() {
+        let summaries = [
+            MenuBarUsageSummary(
+                id: "codex-weekly",
+                provider: .codex,
+                title: "주간",
+                usedPercent: 56
+            ),
+            MenuBarUsageSummary(
+                id: "claude-weekly",
+                provider: .anthropic,
+                title: "주간",
+                usedPercent: 34
+            ),
+            MenuBarUsageSummary(
+                id: "claude-fable",
+                provider: .anthropic,
+                title: "Fable 주간",
+                usedPercent: 14
+            )
+        ]
+
+        let segments = makeMenuBarStatusSegments(from: summaries)
+
+        XCTAssertEqual(segments.count, 3)
+        XCTAssertEqual(segments.map(\.percentText), ["56%", "34%", "14%"])
+        XCTAssertEqual(segments.map(\.filledCount), [3, 2, 1])
+        XCTAssertEqual(segments.map(\.emptyCount), [2, 3, 4])
+    }
 }

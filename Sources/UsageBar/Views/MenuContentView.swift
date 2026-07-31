@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MenuContentView: View {
     @EnvironmentObject private var store: UsageStore
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(spacing: 14) {
@@ -42,7 +43,9 @@ struct MenuContentView: View {
             }
 
             HStack {
-                SettingsLink {
+                Button {
+                    showSettings()
+                } label: {
                     Label("설정", systemImage: "gearshape")
                 }
                 .buttonStyle(.plain)
@@ -61,6 +64,29 @@ struct MenuContentView: View {
         .frame(width: 410)
         .task {
             store.refreshAll()
+        }
+    }
+
+    private func showSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        openSettings()
+        bringSettingsToFront(attemptsRemaining: 6)
+    }
+
+    private func bringSettingsToFront(attemptsRemaining: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.activate(ignoringOtherApps: true)
+            let settingsWindows = NSApp.windows.filter {
+                $0.isVisible &&
+                    $0.styleMask.contains(.titled) &&
+                    !($0 is NSPanel)
+            }
+            if let settingsWindow = settingsWindows.first {
+                settingsWindow.orderFrontRegardless()
+                settingsWindow.makeKey()
+            } else if attemptsRemaining > 1 {
+                bringSettingsToFront(attemptsRemaining: attemptsRemaining - 1)
+            }
         }
     }
 }

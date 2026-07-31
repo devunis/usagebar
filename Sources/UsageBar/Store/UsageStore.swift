@@ -1,5 +1,18 @@
 import Foundation
 
+func preferredMenuBarWindow(
+    from windows: [QuotaWindow],
+    enabledKinds: Set<QuotaWindowKind>,
+    selection: MenuBarLimitSelection
+) -> QuotaWindow? {
+    windows
+        .filter {
+            enabledKinds.contains($0.kind) &&
+                (selection.windowKind == nil || selection.windowKind == $0.kind)
+        }
+        .max { $0.clampedPercent < $1.clampedPercent }
+}
+
 @MainActor
 final class UsageStore: ObservableObject {
     @Published private(set) var states: [ProviderKind: ProviderState] = Dictionary(
@@ -27,6 +40,14 @@ final class UsageStore: ObservableObject {
             UserDefaults.standard.set(
                 menuBarLimitSelection.rawValue,
                 forKey: Defaults.menuBarLimit
+            )
+        }
+    }
+    @Published var claudeMenuBarLimitSelection: MenuBarLimitSelection {
+        didSet {
+            UserDefaults.standard.set(
+                claudeMenuBarLimitSelection.rawValue,
+                forKey: Defaults.claudeMenuBarLimit
             )
         }
     }
@@ -92,6 +113,19 @@ final class UsageStore: ObservableObject {
         menuBarLimitSelection = MenuBarLimitSelection(
             rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarLimit) ?? ""
         ) ?? .highest
+        if let savedClaudeLimit = MenuBarLimitSelection(
+            rawValue: UserDefaults.standard.string(
+                forKey: Defaults.claudeMenuBarLimit
+            ) ?? ""
+        ) {
+            claudeMenuBarLimitSelection = savedClaudeLimit
+        } else {
+            claudeMenuBarLimitSelection = .weekly
+            UserDefaults.standard.set(
+                MenuBarLimitSelection.weekly.rawValue,
+                forKey: Defaults.claudeMenuBarLimit
+            )
+        }
         menuBarDisplayStyle = MenuBarDisplayStyle(
             rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarDisplayStyle) ?? ""
         ) ?? .barAndPercent
@@ -158,29 +192,27 @@ final class UsageStore: ObservableObject {
             providers = visibleProviders
         }
 
-        let summaries = providers.flatMap { provider -> [MenuBarUsageSummary] in
-            guard case .loaded(let snapshot) = states[provider] else { return [] }
-            return snapshot.windows
-                .filter({
-                        enabledWindowKinds.contains($0.kind) &&
-                            (menuBarLimitSelection.windowKind == nil ||
-                                menuBarLimitSelection.windowKind == $0.kind)
-                })
-                .map { window in
-                    MenuBarUsageSummary(
-                        id: "\(provider.rawValue)-\(window.id)",
-                        provider: provider,
-                        title: window.title,
-                        usedPercent: window.clampedPercent
-                    )
-                }
+        let summaries = providers.compactMap { provider -> MenuBarUsageSummary? in
+            guard case .loaded(let snapshot) = states[provider] else { return nil }
+            let selection = provider == .anthropic
+                ? claudeMenuBarLimitSelection
+                : menuBarLimitSelection
+            guard let window = preferredMenuBarWindow(
+                from: snapshot.windows,
+                enabledKinds: enabledWindowKinds,
+                selection: selection
+            ) else {
+                return nil
+            }
+            return MenuBarUsageSummary(
+                id: "\(provider.rawValue)-\(window.id)",
+                provider: provider,
+                title: window.title,
+                usedPercent: window.clampedPercent
+            )
         }
 
-        return Array(
-            summaries
-                .sorted { $0.usedPercent > $1.usedPercent }
-                .prefix(menuBarItemCount)
-        )
+        return Array(summaries.prefix(menuBarItemCount))
     }
 
     var menuBarUsageSummary: MenuBarUsageSummary? {
@@ -303,6 +335,7 @@ final class UsageStore: ObservableObject {
         static let didAddMenuBarUsage = "didAddMenuBarUsageOption"
         static let menuBarProvider = "menuBarProviderSelection"
         static let menuBarLimit = "menuBarLimitSelection"
+        static let claudeMenuBarLimit = "claudeMenuBarLimitSelection"
         static let menuBarDisplayStyle = "menuBarDisplayStyle"
         static let menuBarColorStyle = "menuBarColorStyle"
         static let menuBarItemCount = "menuBarItemCount"

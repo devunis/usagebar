@@ -117,9 +117,9 @@ final class UsageDecoderTests: XCTestCase {
                 usedPercent: 34
             ),
             MenuBarUsageSummary(
-                id: "claude-fable",
-                provider: .anthropic,
-                title: "Fable 주간",
+                id: "gemini-model",
+                provider: .gemini,
+                title: "Gemini Pro",
                 usedPercent: 14
             )
         ]
@@ -130,5 +130,60 @@ final class UsageDecoderTests: XCTestCase {
         XCTAssertEqual(segments.map(\.percentText), ["56%", "34%", "14%"])
         XCTAssertEqual(segments.map(\.filledCount), [3, 2, 1])
         XCTAssertEqual(segments.map(\.emptyCount), [2, 3, 4])
+    }
+
+    func testClaudeMenuBarSelectsOneConfiguredWindow() throws {
+        let windows = [
+            QuotaWindow(
+                id: "five-hour",
+                title: "5시간",
+                kind: .shortTerm,
+                usedPercent: 7,
+                durationMinutes: 300,
+                resetsAt: nil
+            ),
+            QuotaWindow(
+                id: "weekly",
+                title: "주간",
+                kind: .weekly,
+                usedPercent: 34,
+                durationMinutes: 10_080,
+                resetsAt: nil
+            ),
+            QuotaWindow(
+                id: "fable",
+                title: "Fable 주간",
+                kind: .modelScoped,
+                usedPercent: 14,
+                durationMinutes: 10_080,
+                resetsAt: nil
+            )
+        ]
+        let enabledKinds = Set(QuotaWindowKind.allCases)
+
+        XCTAssertEqual(
+            preferredMenuBarWindow(
+                from: windows,
+                enabledKinds: enabledKinds,
+                selection: .shortTerm
+            )?.id,
+            "five-hour"
+        )
+        XCTAssertEqual(
+            preferredMenuBarWindow(
+                from: windows,
+                enabledKinds: enabledKinds,
+                selection: .weekly
+            )?.id,
+            "weekly"
+        )
+        XCTAssertEqual(
+            preferredMenuBarWindow(
+                from: windows,
+                enabledKinds: enabledKinds,
+                selection: .modelScoped
+            )?.id,
+            "fable"
+        )
     }
 }

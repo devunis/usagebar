@@ -77,7 +77,7 @@ enum MenuBarProviderSelection: String, CaseIterable, Identifiable, Sendable {
 
     var name: String {
         switch self {
-        case .highest: "전체에서 가장 높은 항목"
+        case .highest: "켜진 서비스 모두"
         case .codex: "ChatGPT / Codex"
         case .anthropic: "Claude"
         case .gemini: "Gemini"

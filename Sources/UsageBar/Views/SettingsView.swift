@@ -31,7 +31,7 @@ struct SettingsView: View {
                         set: { store.setWindowKindEnabled($0, for: kind) }
                     ))
                 }
-                ForEach(DisplayOption.allCases) { option in
+                ForEach(DisplayOption.allCases.filter { $0 != .menuBarUsage }) { option in
                     Toggle(option.name, isOn: Binding(
                         get: { store.isDisplayOptionEnabled(option) },
                         set: { store.setDisplayOptionEnabled($0, for: option) }
@@ -44,6 +44,37 @@ struct SettingsView: View {
                     }
                     Button("모두 숨기기") {
                         store.setAllDisplayItems(false)
+                    }
+                }
+            }
+
+            Section("메뉴바 사용량") {
+                Toggle("메뉴바에 표시", isOn: Binding(
+                    get: { store.isDisplayOptionEnabled(.menuBarUsage) },
+                    set: { store.setDisplayOptionEnabled($0, for: .menuBarUsage) }
+                ))
+
+                Picker("서비스", selection: $store.menuBarProviderSelection) {
+                    ForEach(MenuBarProviderSelection.allCases) { selection in
+                        Text(selection.name).tag(selection)
+                    }
+                }
+
+                Picker("한도", selection: $store.menuBarLimitSelection) {
+                    ForEach(MenuBarLimitSelection.allCases) { selection in
+                        Text(selection.name).tag(selection)
+                    }
+                }
+
+                Picker("표시 방식", selection: $store.menuBarDisplayStyle) {
+                    ForEach(MenuBarDisplayStyle.allCases) { style in
+                        Text(style.name).tag(style)
+                    }
+                }
+
+                Picker("색상", selection: $store.menuBarColorStyle) {
+                    ForEach(MenuBarColorStyle.allCases) { style in
+                        Text(style.name).tag(style)
                     }
                 }
             }
@@ -65,7 +96,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 650)
+        .frame(width: 520, height: 760)
     }
 
     private func providerToggle(_ kind: ProviderKind, command: String) -> some View {

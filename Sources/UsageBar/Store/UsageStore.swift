@@ -14,6 +14,38 @@ final class UsageStore: ObservableObject {
     @Published private(set) var enabledProviders: Set<ProviderKind>
     @Published private(set) var enabledWindowKinds: Set<QuotaWindowKind>
     @Published private(set) var enabledDisplayOptions: Set<DisplayOption>
+    @Published var menuBarProviderSelection: MenuBarProviderSelection {
+        didSet {
+            UserDefaults.standard.set(
+                menuBarProviderSelection.rawValue,
+                forKey: Defaults.menuBarProvider
+            )
+        }
+    }
+    @Published var menuBarLimitSelection: MenuBarLimitSelection {
+        didSet {
+            UserDefaults.standard.set(
+                menuBarLimitSelection.rawValue,
+                forKey: Defaults.menuBarLimit
+            )
+        }
+    }
+    @Published var menuBarDisplayStyle: MenuBarDisplayStyle {
+        didSet {
+            UserDefaults.standard.set(
+                menuBarDisplayStyle.rawValue,
+                forKey: Defaults.menuBarDisplayStyle
+            )
+        }
+    }
+    @Published var menuBarColorStyle: MenuBarColorStyle {
+        didSet {
+            UserDefaults.standard.set(
+                menuBarColorStyle.rawValue,
+                forKey: Defaults.menuBarColorStyle
+            )
+        }
+    }
     private var timerTask: Task<Void, Never>?
 
     init() {
@@ -46,6 +78,18 @@ final class UsageStore: ObservableObject {
             enabledDisplayOptions = Set(DisplayOption.allCases)
             UserDefaults.standard.set(true, forKey: Defaults.didAddMenuBarUsage)
         }
+        menuBarProviderSelection = MenuBarProviderSelection(
+            rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarProvider) ?? ""
+        ) ?? .highest
+        menuBarLimitSelection = MenuBarLimitSelection(
+            rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarLimit) ?? ""
+        ) ?? .highest
+        menuBarDisplayStyle = MenuBarDisplayStyle(
+            rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarDisplayStyle) ?? ""
+        ) ?? .barAndPercent
+        menuBarColorStyle = MenuBarColorStyle(
+            rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarColorStyle) ?? ""
+        ) ?? .provider
         restartTimer()
     }
 
@@ -95,10 +139,21 @@ final class UsageStore: ObservableObject {
     var menuBarUsageSummary: MenuBarUsageSummary? {
         guard enabledDisplayOptions.contains(.menuBarUsage) else { return nil }
 
-        return visibleProviders.compactMap { provider -> MenuBarUsageSummary? in
+        let providers: [ProviderKind]
+        if let selected = menuBarProviderSelection.provider {
+            providers = enabledProviders.contains(selected) ? [selected] : []
+        } else {
+            providers = visibleProviders
+        }
+
+        return providers.compactMap { provider -> MenuBarUsageSummary? in
             guard case .loaded(let snapshot) = states[provider],
                   let window = snapshot.windows
-                    .filter({ enabledWindowKinds.contains($0.kind) })
+                    .filter({
+                        enabledWindowKinds.contains($0.kind) &&
+                            (menuBarLimitSelection.windowKind == nil ||
+                                menuBarLimitSelection.windowKind == $0.kind)
+                    })
                     .max(by: { $0.clampedPercent < $1.clampedPercent }) else {
                 return nil
             }
@@ -224,5 +279,9 @@ final class UsageStore: ObservableObject {
         static let windowKinds = "enabledWindowKinds"
         static let displayOptions = "enabledDisplayOptions"
         static let didAddMenuBarUsage = "didAddMenuBarUsageOption"
+        static let menuBarProvider = "menuBarProviderSelection"
+        static let menuBarLimit = "menuBarLimitSelection"
+        static let menuBarDisplayStyle = "menuBarDisplayStyle"
+        static let menuBarColorStyle = "menuBarColorStyle"
     }
 }

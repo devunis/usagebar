@@ -67,6 +67,95 @@ enum DisplayOption: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum MenuBarProviderSelection: String, CaseIterable, Identifiable, Sendable {
+    case highest
+    case codex
+    case anthropic
+    case gemini
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .highest: "전체에서 가장 높은 항목"
+        case .codex: "ChatGPT / Codex"
+        case .anthropic: "Claude"
+        case .gemini: "Gemini"
+        }
+    }
+
+    var provider: ProviderKind? {
+        switch self {
+        case .highest: nil
+        case .codex: .codex
+        case .anthropic: .anthropic
+        case .gemini: .gemini
+        }
+    }
+}
+
+enum MenuBarLimitSelection: String, CaseIterable, Identifiable, Sendable {
+    case highest
+    case shortTerm
+    case weekly
+    case modelScoped
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .highest: "가장 높은 한도"
+        case .shortTerm: "단기 한도"
+        case .weekly: "전체 주간 한도"
+        case .modelScoped: "모델별 한도"
+        }
+    }
+
+    var windowKind: QuotaWindowKind? {
+        switch self {
+        case .highest: nil
+        case .shortTerm: .shortTerm
+        case .weekly: .weekly
+        case .modelScoped: .modelScoped
+        }
+    }
+}
+
+enum MenuBarDisplayStyle: String, CaseIterable, Identifiable, Sendable {
+    case barAndPercent
+    case barOnly
+    case percentOnly
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .barAndPercent: "막대 + 퍼센트"
+        case .barOnly: "막대만"
+        case .percentOnly: "퍼센트만"
+        }
+    }
+
+    var showsBar: Bool { self != .percentOnly }
+    var showsPercent: Bool { self != .barOnly }
+}
+
+enum MenuBarColorStyle: String, CaseIterable, Identifiable, Sendable {
+    case provider
+    case trafficLight
+    case monochrome
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .provider: "서비스 색상"
+        case .trafficLight: "사용률 경고 색상"
+        case .monochrome: "단색"
+        }
+    }
+}
+
 struct MenuBarUsageSummary: Equatable, Sendable {
     let provider: ProviderKind
     let title: String

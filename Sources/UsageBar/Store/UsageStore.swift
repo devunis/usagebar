@@ -11,11 +11,19 @@ final class UsageStore: ObservableObject {
             restartTimer()
         }
     }
+    @Published private(set) var enabledProviders: Set<ProviderKind>
     private var timerTask: Task<Void, Never>?
 
     init() {
         let savedInterval = UserDefaults.standard.integer(forKey: Defaults.refreshInterval)
         refreshIntervalMinutes = savedInterval == 0 ? 15 : savedInterval
+        if let savedProviders = UserDefaults.standard.stringArray(
+            forKey: Defaults.enabledProviders
+        ) {
+            enabledProviders = Set(savedProviders.compactMap(ProviderKind.init(rawValue:)))
+        } else {
+            enabledProviders = [.codex, .anthropic]
+        }
         restartTimer()
     }
 
@@ -24,12 +32,13 @@ final class UsageStore: ObservableObject {
     }
 
     func refreshAll() {
-        for kind in ProviderKind.allCases {
+        for kind in visibleProviders {
             refresh(kind)
         }
     }
 
     func refresh(_ kind: ProviderKind) {
+        guard enabledProviders.contains(kind) else { return }
         states[kind] = .loading
 
         Task {
@@ -57,6 +66,30 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    var visibleProviders: [ProviderKind] {
+        ProviderKind.allCases.filter(enabledProviders.contains)
+    }
+
+    func isEnabled(_ kind: ProviderKind) -> Bool {
+        enabledProviders.contains(kind)
+    }
+
+    func setEnabled(_ enabled: Bool, for kind: ProviderKind) {
+        if enabled {
+            enabledProviders.insert(kind)
+            refresh(kind)
+        } else {
+            enabledProviders.remove(kind)
+            states[kind] = .idle
+        }
+        UserDefaults.standard.set(
+            ProviderKind.allCases
+                .filter(enabledProviders.contains)
+                .map(\.rawValue),
+            forKey: Defaults.enabledProviders
+        )
+    }
+
     private func restartTimer() {
         timerTask?.cancel()
         let interval = refreshIntervalMinutes
@@ -72,5 +105,6 @@ final class UsageStore: ObservableObject {
 
     private enum Defaults {
         static let refreshInterval = "refreshIntervalMinutes"
+        static let enabledProviders = "enabledProviders"
     }
 }

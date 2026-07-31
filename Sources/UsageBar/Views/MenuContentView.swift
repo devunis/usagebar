@@ -24,12 +24,19 @@ struct MenuContentView: View {
                 .help("모두 새로고침")
             }
 
-            ForEach(ProviderKind.allCases) { kind in
+            ForEach(store.visibleProviders) { kind in
                 ProviderCard(
                     kind: kind,
                     state: store.states[kind] ?? .idle,
                     refresh: { store.refresh(kind) }
                 )
+            }
+
+            if store.visibleProviders.isEmpty {
+                Text("설정에서 표시할 서비스를 선택해 주세요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             HStack {

@@ -52,6 +52,31 @@ final class UsageDecoderTests: XCTestCase {
         XCTAssertNotNil(snapshot.windows[1].resetsAt)
     }
 
+    func testClaudeUsageParsesFableScopedWeeklyWindow() throws {
+        let data = Data(
+            """
+            {
+              "five_hour": {"utilization": 22.5, "resets_at": "2026-08-01T01:00:00Z"},
+              "seven_day": {"utilization": 48, "resets_at": "2026-08-05T01:00:00Z"},
+              "limits": [
+                {
+                  "kind": "weekly_scoped",
+                  "percent": 67.5,
+                  "resets_at": "2026-08-05T01:00:00Z",
+                  "scope": {"model": {"display_name": "Fable"}}
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let snapshot = try ClaudeQuotaProvider.parse(data)
+        let fable = try XCTUnwrap(snapshot.windows.first { $0.title == "Fable 주간" })
+        XCTAssertEqual(fable.usedPercent, 67.5)
+        XCTAssertEqual(fable.durationMinutes, 10_080)
+        XCTAssertNotNil(fable.resetsAt)
+    }
+
     func testGeminiQuotaUsesMostRestrictiveBucketPerModel() throws {
         let data = Data(
             """

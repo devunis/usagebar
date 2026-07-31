@@ -7,7 +7,7 @@ ChatGPT/Codex, Claude, Gemini 구독 계정의 현재 한도와 리셋 시간을
 | 공급자 | 표시 항목 | 인증 |
 | --- | --- | --- |
 | ChatGPT / Codex | 5시간·주간 등 현재 rate-limit 창 | Codex CLI 로그인 |
-| Claude | 5시간·주간·모델별 주간 한도 | Claude CLI OAuth 로그인 |
+| Claude | 5시간·주간·Fable 등 모델별 주간 한도 | Claude CLI OAuth 로그인 |
 | Gemini | 모델별 잔여 quota와 리셋 시간 | Gemini CLI OAuth 로그인 |
 
 API 키를 입력하거나 저장하지 않습니다. UsageBar는 이 Mac의 공식 CLI 로그인 세션을 재사용하며 토큰 값을 화면이나 로그에 출력하지 않습니다.
@@ -38,7 +38,7 @@ swift test
 open UsageBar.app
 ```
 
-앱은 15분마다 자동 새로고침하며, 설정에서 수동 또는 5/15/30/60분으로 바꿀 수 있습니다.
+앱은 15분마다 자동 새로고침하며, 설정에서 수동 또는 5/15/30/60분으로 바꿀 수 있습니다. Gemini는 기본적으로 숨겨져 있으며 공급자별 표시 여부도 설정에서 바꿀 수 있습니다.
 
 ## 구현 방식
 

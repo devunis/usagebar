@@ -36,7 +36,7 @@ struct ClaudeQuotaProvider: QuotaProvider {
             ("seven_day_opus", "Opus 주간")
         ]
         let formatter = ISO8601DateFormatter()
-        let windows = definitions.compactMap { key, title -> QuotaWindow? in
+        var windows = definitions.compactMap { key, title -> QuotaWindow? in
             guard let value = object[key] as? [String: Any],
                   let utilization = number(value["utilization"]) else { return nil }
             let reset = (value["resets_at"] as? String).flatMap(formatter.date)
@@ -48,6 +48,32 @@ struct ClaudeQuotaProvider: QuotaProvider {
                 resetsAt: reset
             )
         }
+
+        if let limits = object["limits"] as? [[String: Any]] {
+            let scoped = limits.compactMap { limit -> QuotaWindow? in
+                guard limit["kind"] as? String == "weekly_scoped",
+                      let scope = limit["scope"] as? [String: Any],
+                      let model = scope["model"] as? [String: Any],
+                      let displayName = model["display_name"] as? String,
+                      !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      let percent = number(limit["percent"]) else {
+                    return nil
+                }
+                let cleanName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                let reset = (limit["resets_at"] as? String).flatMap(formatter.date)
+                return QuotaWindow(
+                    id: "weekly-scoped-\(cleanName.lowercased())",
+                    title: "\(cleanName) 주간",
+                    usedPercent: percent,
+                    durationMinutes: 10_080,
+                    resetsAt: reset
+                )
+            }
+
+            let existingTitles = Set(windows.map(\.title))
+            windows.append(contentsOf: scoped.filter { !existingTitles.contains($0.title) })
+        }
+
         guard !windows.isEmpty else { throw UsageProviderError.invalidResponse }
         return QuotaSnapshot(
             provider: .anthropic,

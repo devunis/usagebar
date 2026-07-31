@@ -10,9 +10,9 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                connection("ChatGPT / Codex", command: "codex login")
-                connection("Claude", command: "claude auth login")
-                connection("Gemini", command: "gemini")
+                providerToggle(.codex, command: "codex login")
+                providerToggle(.anthropic, command: "claude auth login")
+                providerToggle(.gemini, command: "gemini")
             }
 
             Section("자동 새로고침") {
@@ -35,14 +35,17 @@ struct SettingsView: View {
         .frame(width: 520, height: 390)
     }
 
-    private func connection(_ name: String, command: String) -> some View {
-        HStack {
-            Text(name)
-            Spacer()
+    private func providerToggle(_ kind: ProviderKind, command: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Toggle(kind.name, isOn: Binding(
+                get: { store.isEnabled(kind) },
+                set: { store.setEnabled($0, for: kind) }
+            ))
             Text(command)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.tertiary)
                 .textSelection(.enabled)
+                .padding(.leading, 20)
         }
     }
 }

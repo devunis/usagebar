@@ -43,7 +43,9 @@ struct CodexQuotaProvider: QuotaProvider {
                 "clientInfo": [
                     "name": "usagebar",
                     "title": "UsageBar",
-                    "version": "0.2.0"
+                    "version": Bundle.main.object(
+                        forInfoDictionaryKey: "CFBundleShortVersionString"
+                    ) as? String ?? "development"
                 ],
                 "capabilities": [:]
             ]

@@ -3,6 +3,7 @@ import SwiftUI
 struct ProviderCard: View {
     let kind: ProviderKind
     let state: ProviderState
+    let isRefreshing: Bool
     let enabledWindowKinds: Set<QuotaWindowKind>
     let enabledDisplayOptions: Set<DisplayOption>
     let refresh: () -> Void
@@ -17,7 +18,7 @@ struct ProviderCard: View {
 
                 Spacer()
 
-                if case .loading = state {
+                if isRefreshing {
                     ProgressView()
                         .controlSize(.small)
                 } else {

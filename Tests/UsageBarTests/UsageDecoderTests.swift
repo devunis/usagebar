@@ -186,4 +186,31 @@ final class UsageDecoderTests: XCTestCase {
             "fable"
         )
     }
+
+    func testRefreshingKeepsPreviousSnapshotVisible() {
+        let snapshot = QuotaSnapshot(
+            provider: .codex,
+            windows: [],
+            plan: "plus",
+            fetchedAt: Date()
+        )
+        let loaded = ProviderState.loaded(snapshot)
+
+        XCTAssertEqual(displayStateWhileRefreshing(loaded), loaded)
+        XCTAssertEqual(
+            displayStateAfterFailedRefresh(
+                previous: loaded,
+                failure: .failed("network")
+            ),
+            loaded
+        )
+        XCTAssertEqual(displayStateWhileRefreshing(.idle), .loading)
+        XCTAssertEqual(
+            displayStateAfterFailedRefresh(
+                previous: .idle,
+                failure: .failed("network")
+            ),
+            .failed("network")
+        )
+    }
 }

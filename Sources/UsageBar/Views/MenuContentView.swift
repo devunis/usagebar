@@ -29,6 +29,7 @@ struct MenuContentView: View {
                 ProviderCard(
                     kind: kind,
                     state: store.states[kind] ?? .idle,
+                    isRefreshing: store.isRefreshing(kind),
                     enabledWindowKinds: store.enabledWindowKinds,
                     enabledDisplayOptions: store.enabledDisplayOptions,
                     refresh: {

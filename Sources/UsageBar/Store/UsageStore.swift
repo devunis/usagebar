@@ -13,6 +13,23 @@ func preferredMenuBarWindow(
         .max { $0.clampedPercent < $1.clampedPercent }
 }
 
+func displayStateWhileRefreshing(_ previous: ProviderState) -> ProviderState {
+    if case .loaded = previous {
+        return previous
+    }
+    return .loading
+}
+
+func displayStateAfterFailedRefresh(
+    previous: ProviderState,
+    failure: ProviderState
+) -> ProviderState {
+    if case .loaded = previous {
+        return previous
+    }
+    return failure
+}
+
 @MainActor
 final class UsageStore: ObservableObject {
     @Published private(set) var states: [ProviderKind: ProviderState] = Dictionary(
@@ -27,6 +44,7 @@ final class UsageStore: ObservableObject {
     @Published private(set) var enabledProviders: Set<ProviderKind>
     @Published private(set) var enabledWindowKinds: Set<QuotaWindowKind>
     @Published private(set) var enabledDisplayOptions: Set<DisplayOption>
+    @Published private(set) var refreshingProviders: Set<ProviderKind> = []
     @Published var menuBarProviderSelection: MenuBarProviderSelection {
         didSet {
             UserDefaults.standard.set(
@@ -148,10 +166,18 @@ final class UsageStore: ObservableObject {
     }
 
     func refresh(_ kind: ProviderKind, allowsCredentialPrompt: Bool = false) {
-        guard enabledProviders.contains(kind) else { return }
-        states[kind] = .loading
+        guard enabledProviders.contains(kind),
+              !refreshingProviders.contains(kind) else {
+            return
+        }
+        let previousState = states[kind] ?? .idle
+        states[kind] = displayStateWhileRefreshing(previousState)
+        refreshingProviders.insert(kind)
 
         Task {
+            defer {
+                refreshingProviders.remove(kind)
+            }
             do {
                 let provider: any QuotaProvider = switch kind {
                 case .codex:
@@ -166,16 +192,28 @@ final class UsageStore: ObservableObject {
                 let snapshot = try await provider.fetchQuota()
                 states[kind] = .loaded(snapshot)
             } catch let error as UsageProviderError {
+                let failure: ProviderState
                 switch error {
                 case .missingCredential(let message):
-                    states[kind] = .needsConfiguration(message)
+                    failure = .needsConfiguration(message)
                 default:
-                    states[kind] = .failed(error.localizedDescription)
+                    failure = .failed(error.localizedDescription)
                 }
+                states[kind] = displayStateAfterFailedRefresh(
+                    previous: previousState,
+                    failure: failure
+                )
             } catch {
-                states[kind] = .failed(error.localizedDescription)
+                states[kind] = displayStateAfterFailedRefresh(
+                    previous: previousState,
+                    failure: .failed(error.localizedDescription)
+                )
             }
         }
+    }
+
+    func isRefreshing(_ kind: ProviderKind) -> Bool {
+        refreshingProviders.contains(kind)
     }
 
     var visibleProviders: [ProviderKind] {

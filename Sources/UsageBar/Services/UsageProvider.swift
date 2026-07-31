@@ -1,8 +1,8 @@
 import Foundation
 
-protocol UsageProvider: Sendable {
+protocol QuotaProvider: Sendable {
     var kind: ProviderKind { get }
-    func fetchUsage(from start: Date, to end: Date) async throws -> UsageSnapshot
+    func fetchQuota() async throws -> QuotaSnapshot
 }
 
 enum UsageProviderError: LocalizedError {
@@ -12,6 +12,7 @@ enum UsageProviderError: LocalizedError {
     case unauthorized(String)
     case server(status: Int, message: String)
     case commandFailed(String)
+    case unsupported(String)
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +27,8 @@ enum UsageProviderError: LocalizedError {
         case .server(let status, let message):
             "서버 오류 \(status): \(message)"
         case .commandFailed(let message):
+            message
+        case .unsupported(let message):
             message
         }
     }

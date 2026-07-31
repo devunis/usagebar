@@ -1,78 +1,60 @@
 # UsageBar
 
-OpenAI, Claude(Anthropic), Gemini API 사용량을 한눈에 보여주는 네이티브 macOS 메뉴바 앱입니다.
+ChatGPT/Codex, Claude, Gemini 구독 계정의 현재 한도와 리셋 시간을 보여주는 네이티브 macOS 메뉴바 앱입니다.
 
-## 현재 지원 범위
+## 지원 범위
 
-| 공급자 | 조회 데이터 | 인증 |
+| 공급자 | 표시 항목 | 인증 |
 | --- | --- | --- |
-| OpenAI | 최근 30일 입력/출력 토큰, 모델 요청 수 | 조직 Admin API 키 |
-| Anthropic | 최근 30일 입력/캐시/출력 토큰 | 조직 Admin API 키 |
-| Gemini API | 최근 30일 Cloud Monitoring 토큰/요청 지표 | `gcloud` ADC + 프로젝트 ID |
+| ChatGPT / Codex | 5시간·주간 등 현재 rate-limit 창 | Codex CLI 로그인 |
+| Claude | 5시간·주간·모델별 주간 한도 | Claude CLI OAuth 로그인 |
+| Gemini | 모델별 잔여 quota와 리셋 시간 | Gemini CLI OAuth 로그인 |
 
-> ChatGPT, Claude.ai, Gemini 웹 구독의 개인 메시지 잔여량은 공식 공개 API가 아닙니다. UsageBar는 브라우저 쿠키를 훔치거나 비공개 엔드포인트를 호출하지 않고, 공식 API/Cloud 지표만 사용합니다.
+API 키를 입력하거나 저장하지 않습니다. UsageBar는 이 Mac의 공식 CLI 로그인 세션을 재사용하며 토큰 값을 화면이나 로그에 출력하지 않습니다.
 
 ## 요구 사항
 
 - macOS 14 Sonoma 이상
-- Swift 6 / Xcode Command Line Tools
-- Gemini를 사용할 경우 [Google Cloud CLI](https://cloud.google.com/sdk/docs/install)
+- 조회할 서비스의 공식 CLI
+- 소스 빌드 시 Swift 6 / Xcode
 
-Command Line Tools의 Swift와 SDK 버전이 맞지 않는 환경에서는 전체 Xcode를 선택해 주세요.
+각 CLI에 로그인합니다.
 
 ```bash
-sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+codex login
+claude auth login
+gemini
 ```
 
-## 실행
+로그인되지 않았거나 CLI가 설치되지 않은 공급자는 메뉴에 연결 안내가 표시됩니다.
+
+> Gemini CLI의 계정 유형과 정책에 따라 소비자 구독 quota 조회가 제공되지 않을 수 있습니다. 이 경우 UsageBar가 해당 오류를 그대로 안내합니다.
+
+## 빌드 및 실행
 
 ```bash
-swift run UsageBar
-```
-
-설치 가능한 `.app` 번들을 만들려면:
-
-```bash
+swift test
 ./scripts/build-app.sh release
 open UsageBar.app
 ```
 
-앱을 메뉴바에서 연 뒤 **설정**에서:
+앱은 15분마다 자동 새로고침하며, 설정에서 수동 또는 5/15/30/60분으로 바꿀 수 있습니다.
 
-1. OpenAI 조직 설정에서 발급한 Admin API 키를 입력합니다.
-2. Anthropic Console에서 발급한 Admin API 키를 입력합니다.
-3. Gemini는 아래 명령을 한 번 실행하고 Google Cloud 프로젝트 ID를 입력합니다.
+## 구현 방식
 
-```bash
-gcloud auth application-default login
-```
-
-API 키는 macOS Keychain에 저장됩니다. Gemini OAuth 액세스 토큰은 저장하지 않고 필요할 때 `gcloud`에서 가져옵니다.
-
-## 개발
-
-```bash
-swift test
-swift build
-```
-
-구조:
-
-- `Models`: 공통 사용량 모델
-- `Services`: 공급자별 공식 API/Cloud Monitoring 어댑터
-- `Store`: 상태, 자동 새로고침, 설정
-- `Views`: 메뉴바 및 설정 UI
+- Codex: 공식 `codex app-server` JSON-RPC의 `account/rateLimits/read`
+- Claude: Claude CLI가 저장한 OAuth 자격 증명으로 Anthropic usage 응답 조회
+- Gemini: Gemini CLI OAuth 자격 증명으로 Code Assist quota 응답 조회
 
 ## 알려진 제한
 
-- OpenAI와 Anthropic 조직 Usage API는 일반 프로젝트 키가 아닌 Admin 키가 필요합니다.
-- Gemini Cloud Monitoring 지표는 수 분 늦게 표시될 수 있으며, 계정 티어별 지표 이름 변경의 영향을 받을 수 있습니다.
-- Anthropic Usage API가 요청 수를 제공하지 않는 응답에서는 요청 수가 `0`으로 표시됩니다.
-- 이 초기 버전은 개발자용 ad-hoc 서명입니다. 다른 Mac에 배포하려면 Apple Developer ID 서명과 notarization이 필요합니다.
+- 공급자가 로그인·한도 응답 형식을 바꾸면 어댑터 업데이트가 필요할 수 있습니다.
+- 표시되는 창 종류는 플랜과 계정 상태에 따라 다릅니다.
+- 이 초기 버전은 개발자용 ad-hoc 서명입니다. 외부 배포에는 Developer ID 서명과 notarization이 필요합니다.
 
 ## 보안
 
-취약점 제보와 자격 증명 처리 원칙은 [SECURITY.md](SECURITY.md)를 확인해 주세요.
+자격 증명 처리 원칙은 [SECURITY.md](SECURITY.md)를 확인해 주세요.
 
 ## 라이선스
 

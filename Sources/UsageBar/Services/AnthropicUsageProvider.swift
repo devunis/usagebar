@@ -1,108 +1,91 @@
 import Foundation
+import Security
 
-struct AnthropicUsageProvider: UsageProvider {
+struct ClaudeQuotaProvider: QuotaProvider {
     let kind = ProviderKind.anthropic
-    let keychain: KeychainStore
     let client: HTTPClient
 
-    init(keychain: KeychainStore = .shared, client: HTTPClient = HTTPClient()) {
-        self.keychain = keychain
+    init(client: HTTPClient = HTTPClient()) {
         self.client = client
     }
 
-    func fetchUsage(from start: Date, to end: Date) async throws -> UsageSnapshot {
-        guard let adminKey = keychain.value(for: CredentialAccount.anthropic),
-              !adminKey.isEmpty else {
-            throw UsageProviderError.missingCredential("Anthropic Admin API 키가 필요합니다.")
+    func fetchQuota() async throws -> QuotaSnapshot {
+        guard let token = Self.oauthToken() else {
+            throw UsageProviderError.missingCredential(
+                "Claude CLI 로그인이 필요합니다: claude auth login"
+            )
         }
-
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        var components = URLComponents(string: "https://api.anthropic.com/v1/organizations/usage_report/messages")
-        components?.queryItems = [
-            URLQueryItem(name: "starting_at", value: formatter.string(from: start)),
-            URLQueryItem(name: "ending_at", value: formatter.string(from: end)),
-            URLQueryItem(name: "bucket_width", value: "1d"),
-            URLQueryItem(name: "limit", value: "31")
-        ]
-        guard let url = components?.url else { throw UsageProviderError.invalidURL }
-
+        guard let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else {
+            throw UsageProviderError.invalidURL
+        }
         var request = URLRequest(url: url)
-        request.setValue(adminKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         let data = try await client.data(for: request)
-        let page = try JSONDecoder().decode(AnthropicUsagePage.self, from: data)
-        let results = page.data.flatMap(\.results)
-        let input = results.reduce(0) {
-            $0 + $1.uncachedInputTokens + $1.cacheReadInputTokens + $1.cacheCreation.total
-        }
+        return try Self.parse(data)
+    }
 
-        return UsageSnapshot(
-            provider: kind,
-            inputTokens: input,
-            outputTokens: results.reduce(0) { $0 + $1.outputTokens },
-            requests: results.reduce(0) { $0 + $1.requests },
-            periodStart: start,
-            periodEnd: end,
+    static func parse(_ data: Data) throws -> QuotaSnapshot {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw UsageProviderError.invalidResponse
+        }
+        let definitions = [
+            ("five_hour", "5시간"),
+            ("seven_day", "주간"),
+            ("seven_day_sonnet", "Sonnet 주간"),
+            ("seven_day_opus", "Opus 주간")
+        ]
+        let formatter = ISO8601DateFormatter()
+        let windows = definitions.compactMap { key, title -> QuotaWindow? in
+            guard let value = object[key] as? [String: Any],
+                  let utilization = number(value["utilization"]) else { return nil }
+            let reset = (value["resets_at"] as? String).flatMap(formatter.date)
+            return QuotaWindow(
+                id: key,
+                title: title,
+                usedPercent: utilization,
+                durationMinutes: key == "five_hour" ? 300 : 10_080,
+                resetsAt: reset
+            )
+        }
+        guard !windows.isEmpty else { throw UsageProviderError.invalidResponse }
+        return QuotaSnapshot(
+            provider: .anthropic,
+            windows: windows,
+            plan: nil,
             fetchedAt: Date()
         )
     }
-}
 
-struct AnthropicUsagePage: Decodable {
-    let data: [Bucket]
+    private static func oauthToken() -> String? {
+        let credentials = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/.credentials.json")
+        if let data = try? Data(contentsOf: credentials),
+           let token = token(from: data) {
+            return token
+        }
 
-    struct Bucket: Decodable {
-        let results: [Result]
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "Claude Code-credentials",
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+           let data = result as? Data {
+            return token(from: data)
+        }
+        return nil
     }
 
-    struct Result: Decodable {
-        let uncachedInputTokens: Int
-        let cacheReadInputTokens: Int
-        let cacheCreation: CacheCreation
-        let outputTokens: Int
-        let requests: Int
-
-        enum CodingKeys: String, CodingKey {
-            case uncachedInputTokens = "uncached_input_tokens"
-            case cacheReadInputTokens = "cache_read_input_tokens"
-            case cacheCreation = "cache_creation"
-            case outputTokens = "output_tokens"
-            case requests
+    private static func token(from data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let oauth = object["claudeAiOauth"] as? [String: Any],
+              let token = oauth["accessToken"] as? String,
+              !token.isEmpty else {
+            return nil
         }
-
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            uncachedInputTokens = try container.decodeIfPresent(Int.self, forKey: .uncachedInputTokens) ?? 0
-            cacheReadInputTokens = try container.decodeIfPresent(Int.self, forKey: .cacheReadInputTokens) ?? 0
-            cacheCreation = try container.decodeIfPresent(CacheCreation.self, forKey: .cacheCreation) ?? CacheCreation()
-            outputTokens = try container.decodeIfPresent(Int.self, forKey: .outputTokens) ?? 0
-            requests = try container.decodeIfPresent(Int.self, forKey: .requests) ?? 0
-        }
-    }
-
-    struct CacheCreation: Decodable {
-        let ephemeral1hInputTokens: Int
-        let ephemeral5mInputTokens: Int
-
-        var total: Int { ephemeral1hInputTokens + ephemeral5mInputTokens }
-
-        enum CodingKeys: String, CodingKey {
-            case ephemeral1hInputTokens = "ephemeral_1h_input_tokens"
-            case ephemeral5mInputTokens = "ephemeral_5m_input_tokens"
-        }
-
-        init(ephemeral1hInputTokens: Int = 0, ephemeral5mInputTokens: Int = 0) {
-            self.ephemeral1hInputTokens = ephemeral1hInputTokens
-            self.ephemeral5mInputTokens = ephemeral5mInputTokens
-        }
-
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            ephemeral1hInputTokens = try container.decodeIfPresent(Int.self, forKey: .ephemeral1hInputTokens) ?? 0
-            ephemeral5mInputTokens = try container.decodeIfPresent(Int.self, forKey: .ephemeral5mInputTokens) ?? 0
-        }
+        return token
     }
 }

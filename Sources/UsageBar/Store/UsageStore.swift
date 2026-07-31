@@ -11,19 +11,11 @@ final class UsageStore: ObservableObject {
             restartTimer()
         }
     }
-    @Published var geminiProjectID: String {
-        didSet {
-            UserDefaults.standard.set(geminiProjectID, forKey: Defaults.geminiProjectID)
-        }
-    }
-    @Published var settingsMessage: String?
-
     private var timerTask: Task<Void, Never>?
 
     init() {
         let savedInterval = UserDefaults.standard.integer(forKey: Defaults.refreshInterval)
         refreshIntervalMinutes = savedInterval == 0 ? 15 : savedInterval
-        geminiProjectID = UserDefaults.standard.string(forKey: Defaults.geminiProjectID) ?? ""
         restartTimer()
     }
 
@@ -39,21 +31,18 @@ final class UsageStore: ObservableObject {
 
     func refresh(_ kind: ProviderKind) {
         states[kind] = .loading
-        let projectID = geminiProjectID
 
         Task {
             do {
-                let now = Date()
-                let start = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? now
-                let provider: any UsageProvider = switch kind {
-                case .openAI:
-                    OpenAIUsageProvider()
+                let provider: any QuotaProvider = switch kind {
+                case .codex:
+                    CodexQuotaProvider()
                 case .anthropic:
-                    AnthropicUsageProvider()
+                    ClaudeQuotaProvider()
                 case .gemini:
-                    GeminiUsageProvider(projectID: projectID)
+                    GeminiQuotaProvider()
                 }
-                let snapshot = try await provider.fetchUsage(from: start, to: now)
+                let snapshot = try await provider.fetchQuota()
                 states[kind] = .loaded(snapshot)
             } catch let error as UsageProviderError {
                 switch error {
@@ -65,30 +54,6 @@ final class UsageStore: ObservableObject {
             } catch {
                 states[kind] = .failed(error.localizedDescription)
             }
-        }
-    }
-
-    func saveCredentials(openAI: String, anthropic: String) {
-        do {
-            try updateKey(openAI, account: CredentialAccount.openAI)
-            try updateKey(anthropic, account: CredentialAccount.anthropic)
-            settingsMessage = "Keychain에 안전하게 저장했습니다."
-            refreshAll()
-        } catch {
-            settingsMessage = error.localizedDescription
-        }
-    }
-
-    func storedCredential(for account: String) -> String {
-        KeychainStore.shared.value(for: account) ?? ""
-    }
-
-    private func updateKey(_ value: String, account: String) throws {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            try KeychainStore.shared.delete(account)
-        } else {
-            try KeychainStore.shared.set(trimmed, for: account)
         }
     }
 
@@ -107,6 +72,5 @@ final class UsageStore: ObservableObject {
 
     private enum Defaults {
         static let refreshInterval = "refreshIntervalMinutes"
-        static let geminiProjectID = "geminiProjectID"
     }
 }

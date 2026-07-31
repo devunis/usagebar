@@ -41,43 +41,60 @@ struct ProviderCard: View {
     private var content: some View {
         switch state {
         case .loaded(let snapshot):
-            HStack(spacing: 20) {
-                metric("토큰", value: snapshot.totalTokens.compactUsage)
-                metric("입력", value: snapshot.inputTokens.compactUsage)
-                metric("출력", value: snapshot.outputTokens.compactUsage)
-                metric("요청", value: snapshot.requests.compactUsage)
+            if let plan = snapshot.plan, !plan.isEmpty {
+                Text(plan.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-            Text("최근 30일 · \(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened)) 갱신")
+            ForEach(snapshot.windows) { window in
+                quotaRow(window)
+            }
+            Text("\(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened)) 갱신")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
         case .needsConfiguration(let message):
-            stateMessage(message, icon: "key")
+            stateMessage(message, icon: "person.crop.circle.badge.exclamationmark")
 
         case .failed(let message):
             stateMessage(message, icon: "exclamationmark.triangle")
 
         case .loading:
-            Text("사용량을 불러오는 중…")
+            Text("한도를 불러오는 중…")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
         case .idle:
-            Text("새로고침하면 최근 30일 사용량을 조회합니다.")
+            Text("새로고침하면 현재 한도를 조회합니다.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
     }
 
-    private func metric(_ label: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value)
-                .font(.system(.body, design: .rounded, weight: .semibold))
-                .monospacedDigit()
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+    private func quotaRow(_ window: QuotaWindow) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(window.title)
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("\(Int(window.clampedPercent.rounded()))% 사용")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: window.clampedPercent, total: 100)
+                .tint(progressColor(window.clampedPercent))
+            if let reset = window.resetsAt {
+                Text("리셋 \(reset.formatted(.relative(presentation: .named))) · \(reset.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
+    }
+
+    private func progressColor(_ percent: Double) -> Color {
+        if percent >= 90 { return .red }
+        if percent >= 70 { return .orange }
+        return kind.color
     }
 
     private func stateMessage(_ message: String, icon: String) -> some View {

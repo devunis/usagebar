@@ -2,73 +2,78 @@ import XCTest
 @testable import UsageBar
 
 final class UsageDecoderTests: XCTestCase {
-    func testOpenAIUsageDecoding() throws {
-        let data = Data(
-            """
-            {
-              "data": [{
-                "results": [{
-                  "input_tokens": 1200,
-                  "output_tokens": 345,
-                  "num_model_requests": 7
-                }]
-              }]
-            }
-            """.utf8
-        )
+    func testLiveCodexQuotaWhenRequested() async throws {
+        guard ProcessInfo.processInfo.environment["USAGEBAR_LIVE_TEST"] == "1" else {
+            throw XCTSkip("USAGEBAR_LIVE_TEST=1일 때만 로컬 로그인 세션을 확인합니다.")
+        }
 
-        let page = try JSONDecoder().decode(OpenAIUsagePage.self, from: data)
-        XCTAssertEqual(page.data[0].results[0].inputTokens, 1200)
-        XCTAssertEqual(page.data[0].results[0].outputTokens, 345)
-        XCTAssertEqual(page.data[0].results[0].numModelRequests, 7)
+        let snapshot = try await CodexQuotaProvider().fetchQuota()
+        XCTAssertFalse(snapshot.windows.isEmpty)
+        XCTAssertTrue(snapshot.windows.allSatisfy { (0...100).contains($0.clampedPercent) })
     }
 
-    func testAnthropicUsageDecodingHandlesMissingRequests() throws {
-        let data = Data(
-            """
-            {
-              "data": [{
-                "results": [{
-                  "uncached_input_tokens": 1500,
-                  "cache_creation": {
-                    "ephemeral_1h_input_tokens": 1000,
-                    "ephemeral_5m_input_tokens": 500
-                  },
-                  "cache_read_input_tokens": 200,
-                  "output_tokens": 500
-                }]
-              }]
-            }
-            """.utf8
-        )
-
-        let page = try JSONDecoder().decode(AnthropicUsagePage.self, from: data)
-        let result = page.data[0].results[0]
-        XCTAssertEqual(result.uncachedInputTokens + result.cacheCreation.total + result.cacheReadInputTokens, 3200)
-        XCTAssertEqual(result.requests, 0)
-    }
-
-    func testMonitoringValuesDecodeStringAndDouble() throws {
-        let data = Data(
-            """
-            {
-              "timeSeries": [{
-                "points": [
-                  {"value": {"int64Value": "42"}},
-                  {"value": {"doubleValue": 8}}
+    func testCodexRateLimitsParseWeeklyAndFiveHourWindows() throws {
+        let result: [String: Any] = [
+            "rateLimits": [
+                "limitId": "codex",
+                "planType": "plus",
+                "primary": [
+                    "usedPercent": 38,
+                    "windowDurationMins": 10_080,
+                    "resetsAt": 1_800_000_000
+                ],
+                "secondary": [
+                    "usedPercent": 12.5,
+                    "windowDurationMins": 300,
+                    "resetsAt": 1_799_000_000
                 ]
-              }]
+            ]
+        ]
+
+        let snapshot = try CodexQuotaProvider.parse(result)
+        XCTAssertEqual(snapshot.plan, "plus")
+        XCTAssertEqual(snapshot.windows.map(\.title), ["주간", "5시간 보조"])
+        XCTAssertEqual(snapshot.windows[0].usedPercent, 38)
+    }
+
+    func testClaudeUsageParsesWeeklyWindow() throws {
+        let data = Data(
+            """
+            {
+              "five_hour": {"utilization": 22.5, "resets_at": "2026-08-01T01:00:00Z"},
+              "seven_day": {"utilization": 48, "resets_at": "2026-08-05T01:00:00Z"}
             }
             """.utf8
         )
 
-        let response = try JSONDecoder().decode(MonitoringResponse.self, from: data)
-        XCTAssertEqual(response.timeSeries[0].points.map(\.value.integer).reduce(0, +), 50)
+        let snapshot = try ClaudeQuotaProvider.parse(data)
+        XCTAssertEqual(snapshot.windows.map(\.title), ["5시간", "주간"])
+        XCTAssertEqual(snapshot.windows[1].usedPercent, 48)
+        XCTAssertNotNil(snapshot.windows[1].resetsAt)
     }
 
-    func testCompactUsageFormatting() {
-        XCTAssertEqual(999.compactUsage, "999")
-        XCTAssertEqual(1_500.compactUsage, "1.5K")
-        XCTAssertEqual(2_000_000.compactUsage, "2.0M")
+    func testGeminiQuotaUsesMostRestrictiveBucketPerModel() throws {
+        let data = Data(
+            """
+            {
+              "buckets": [
+                {"modelId": "gemini-2.5-pro", "remainingFraction": 0.75, "resetTime": "2026-08-01T01:00:00Z"},
+                {"modelId": "gemini-2.5-pro", "remainingFraction": 0.40, "resetTime": "2026-08-01T02:00:00Z"},
+                {"modelId": "gemini-2.5-flash", "remainingFraction": 0.90}
+              ]
+            }
+            """.utf8
+        )
+
+        let snapshot = try GeminiQuotaProvider.parse(data)
+        let pro = try XCTUnwrap(snapshot.windows.first { $0.id == "gemini-2.5-pro" })
+        XCTAssertEqual(pro.usedPercent, 60, accuracy: 0.001)
+        XCTAssertEqual(snapshot.windows.count, 2)
+    }
+
+    func testWindowTitleFormatting() {
+        XCTAssertEqual(windowTitle(10_080), "주간")
+        XCTAssertEqual(windowTitle(300), "5시간")
+        XCTAssertEqual(windowTitle(60), "1시간")
     }
 }

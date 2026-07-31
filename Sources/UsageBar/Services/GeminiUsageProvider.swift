@@ -1,186 +1,111 @@
 import Foundation
 
-struct GeminiUsageProvider: UsageProvider {
+struct GeminiQuotaProvider: QuotaProvider {
     let kind = ProviderKind.gemini
-    let projectID: String
     let client: HTTPClient
-    let tokenProvider: GCloudTokenProvider
 
-    init(
-        projectID: String,
-        client: HTTPClient = HTTPClient(),
-        tokenProvider: GCloudTokenProvider = GCloudTokenProvider()
-    ) {
-        self.projectID = projectID
+    init(client: HTTPClient = HTTPClient()) {
         self.client = client
-        self.tokenProvider = tokenProvider
     }
 
-    func fetchUsage(from start: Date, to end: Date) async throws -> UsageSnapshot {
-        let project = projectID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !project.isEmpty else {
-            throw UsageProviderError.missingCredential("Google Cloud 프로젝트 ID가 필요합니다.")
+    func fetchQuota() async throws -> QuotaSnapshot {
+        let credentialsURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".gemini/oauth_creds.json")
+        guard let credentialsData = try? Data(contentsOf: credentialsURL),
+              let credentials = try? JSONSerialization.jsonObject(with: credentialsData)
+                as? [String: Any],
+              let token = credentials["access_token"] as? String,
+              !token.isEmpty else {
+            throw UsageProviderError.missingCredential(
+                "Gemini CLI를 설치하고 Google 계정으로 로그인해 주세요."
+            )
         }
-        let accessToken = try tokenProvider.accessToken()
+        if let expiry = number(credentials["expiry_date"]),
+           Date(timeIntervalSince1970: expiry / 1_000) <= Date() {
+            throw UsageProviderError.missingCredential(
+                "Gemini CLI 로그인이 만료되었습니다. gemini를 실행해 다시 로그인해 주세요."
+            )
+        }
 
-        async let freeInput = metric(
-            "generativelanguage.googleapis.com/quota/generate_content_free_tier_input_token_count/usage",
-            project: project, token: accessToken, start: start, end: end
+        let loadData = try await post(
+            endpoint: "v1internal:loadCodeAssist",
+            token: token,
+            body: ["metadata": ["ideType": "GEMINI_CLI", "pluginType": "GEMINI"]]
         )
-        async let paidInput = metric(
-            "generativelanguage.googleapis.com/quota/generate_content_paid_tier_input_token_count/usage",
-            project: project, token: accessToken, start: start, end: end
-        )
-        async let output = metric(
-            "generativelanguage.googleapis.com/generate_content_usage_output_token_count",
-            project: project, token: accessToken, start: start, end: end
-        )
-        async let freeRequests = metric(
-            "generativelanguage.googleapis.com/quota/generate_content_free_tier_requests/usage",
-            project: project, token: accessToken, start: start, end: end
-        )
-        async let paidRequests = metric(
-            "generativelanguage.googleapis.com/quota/generate_requests_per_model/usage",
-            project: project, token: accessToken, start: start, end: end
-        )
+        guard let load = try JSONSerialization.jsonObject(with: loadData) as? [String: Any] else {
+            throw UsageProviderError.invalidResponse
+        }
+        let project: String? = {
+            if let value = load["cloudaicompanionProject"] as? String { return value }
+            if let value = load["cloudaicompanionProject"] as? [String: Any] {
+                return value["id"] as? String ?? value["projectId"] as? String
+            }
+            return nil
+        }()
+        var body: [String: Any] = [:]
+        if let project, !project.isEmpty { body["project"] = project }
 
-        return try await UsageSnapshot(
-            provider: kind,
-            inputTokens: freeInput + paidInput,
-            outputTokens: output,
-            requests: freeRequests + paidRequests,
-            periodStart: start,
-            periodEnd: end,
+        let quotaData = try await post(
+            endpoint: "v1internal:retrieveUserQuota",
+            token: token,
+            body: body
+        )
+        return try Self.parse(quotaData, plan: load["paidTier"] as? String)
+    }
+
+    private func post(
+        endpoint: String,
+        token: String,
+        body: [String: Any]
+    ) async throws -> Data {
+        guard let url = URL(string: "https://cloudcode-pa.googleapis.com/\(endpoint)") else {
+            throw UsageProviderError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return try await client.data(for: request)
+    }
+
+    static func parse(_ data: Data, plan: String? = nil) throws -> QuotaSnapshot {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let buckets = object["buckets"] as? [[String: Any]] else {
+            let detail = String(data: data, encoding: .utf8) ?? ""
+            if detail.localizedCaseInsensitiveContains("ineligible") ||
+                detail.localizedCaseInsensitiveContains("unsupported") {
+                throw UsageProviderError.unsupported(
+                    "이 Gemini 계정 유형은 CLI 한도 조회를 지원하지 않습니다."
+                )
+            }
+            throw UsageProviderError.invalidResponse
+        }
+
+        var byModel: [String: (remaining: Double, reset: Date?)] = [:]
+        let formatter = ISO8601DateFormatter()
+        for bucket in buckets {
+            guard let remaining = number(bucket["remainingFraction"]) else { continue }
+            let model = bucket["modelId"] as? String ?? "Gemini"
+            let reset = (bucket["resetTime"] as? String).flatMap(formatter.date)
+            if let current = byModel[model], current.remaining <= remaining { continue }
+            byModel[model] = (remaining, reset)
+        }
+        let windows = byModel.map { model, value in
+            QuotaWindow(
+                id: model,
+                title: model.replacingOccurrences(of: "gemini-", with: "Gemini "),
+                usedPercent: (1 - value.remaining) * 100,
+                durationMinutes: nil,
+                resetsAt: value.reset
+            )
+        }.sorted { $0.title < $1.title }
+        guard !windows.isEmpty else { throw UsageProviderError.invalidResponse }
+        return QuotaSnapshot(
+            provider: .gemini,
+            windows: windows,
+            plan: plan,
             fetchedAt: Date()
         )
     }
-
-    private func metric(
-        _ type: String,
-        project: String,
-        token: String,
-        start: Date,
-        end: Date
-    ) async throws -> Int {
-        var components = URLComponents(
-            string: "https://monitoring.googleapis.com/v3/projects/\(project)/timeSeries"
-        )
-        let formatter = ISO8601DateFormatter()
-        components?.queryItems = [
-            URLQueryItem(name: "filter", value: "metric.type=\"\(type)\""),
-            URLQueryItem(name: "interval.startTime", value: formatter.string(from: start)),
-            URLQueryItem(name: "interval.endTime", value: formatter.string(from: end)),
-            URLQueryItem(name: "view", value: "FULL")
-        ]
-        guard let url = components?.url else { throw UsageProviderError.invalidURL }
-
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let data = try await client.data(for: request)
-        let response = try JSONDecoder().decode(MonitoringResponse.self, from: data)
-        return response.timeSeries.reduce(0) { seriesTotal, series in
-            seriesTotal + series.points.reduce(0) { $0 + $1.value.integer }
-        }
-    }
-}
-
-struct GCloudTokenProvider: Sendable {
-    func accessToken() throws -> String {
-        let process = Process()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.executableURL = try executableURL()
-        process.arguments = ["auth", "application-default", "print-access-token"]
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        do {
-            try process.run()
-        } catch {
-            throw UsageProviderError.commandFailed(
-                "gcloud를 찾을 수 없습니다. Google Cloud CLI를 설치해 주세요."
-            )
-        }
-        process.waitUntilExit()
-
-        let output = stdout.fileHandleForReading.readDataToEndOfFile()
-        let errorOutput = stderr.fileHandleForReading.readDataToEndOfFile()
-        guard process.terminationStatus == 0,
-              let token = String(data: output, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !token.isEmpty else {
-            let detail = String(data: errorOutput, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            throw UsageProviderError.commandFailed(
-                detail?.isEmpty == false
-                    ? detail!
-                    : "먼저 gcloud auth application-default login을 실행해 주세요."
-            )
-        }
-        return token
-    }
-
-    private func executableURL() throws -> URL {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidates = [
-            "/opt/homebrew/bin/gcloud",
-            "/usr/local/bin/gcloud",
-            "\(home)/google-cloud-sdk/bin/gcloud",
-            "\(home)/.local/google-cloud-sdk/bin/gcloud"
-        ]
-
-        if let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
-            return URL(fileURLWithPath: path)
-        }
-
-        let environmentPaths = ProcessInfo.processInfo.environment["PATH"]?
-            .split(separator: ":")
-            .map(String.init) ?? []
-        if let path = environmentPaths
-            .map({ URL(fileURLWithPath: $0).appendingPathComponent("gcloud").path })
-            .first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
-            return URL(fileURLWithPath: path)
-        }
-
-        throw UsageProviderError.commandFailed(
-            "gcloud를 찾을 수 없습니다. Google Cloud CLI를 설치해 주세요."
-        )
-    }
-}
-
-struct MonitoringResponse: Decodable {
-    let timeSeries: [TimeSeries]
-
-    enum CodingKeys: String, CodingKey {
-        case timeSeries
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        timeSeries = try container.decodeIfPresent([TimeSeries].self, forKey: .timeSeries) ?? []
-    }
-
-    struct TimeSeries: Decodable {
-        let points: [Point]
-    }
-
-    struct Point: Decodable {
-        let value: TypedValue
-    }
-
-    struct TypedValue: Decodable {
-        let int64Value: String?
-        let doubleValue: Double?
-
-        var integer: Int {
-            if let int64Value, let value = Int(int64Value) { return value }
-            if let doubleValue { return Int(doubleValue) }
-            return 0
-        }
-    }
-}
-
-enum CredentialAccount {
-    static let openAI = "openai-admin-key"
-    static let anthropic = "anthropic-admin-key"
 }

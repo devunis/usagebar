@@ -10,7 +10,7 @@ struct MenuContentView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("UsageBar")
                         .font(.title3.bold())
-                    Text("AI API 사용량 한눈에 보기")
+                    Text("AI 구독 한도와 리셋 시간")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -49,7 +49,7 @@ struct MenuContentView: View {
             .font(.caption)
         }
         .padding(16)
-        .frame(width: 370)
+        .frame(width: 410)
         .task {
             store.refreshAll()
         }

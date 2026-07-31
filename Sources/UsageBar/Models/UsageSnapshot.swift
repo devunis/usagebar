@@ -156,7 +156,8 @@ enum MenuBarColorStyle: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-struct MenuBarUsageSummary: Equatable, Sendable {
+struct MenuBarUsageSummary: Identifiable, Equatable, Sendable {
+    let id: String
     let provider: ProviderKind
     let title: String
     let usedPercent: Double

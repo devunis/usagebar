@@ -3,13 +3,15 @@ import SwiftUI
 
 struct ProviderBrandMark: View {
     let kind: ProviderKind
+    var size: CGFloat = 28
+    var compact = false
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: compact ? 4 : 8, style: .continuous)
                 .fill(background)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: compact ? 4 : 8, style: .continuous)
                         .strokeBorder(.black.opacity(0.08), lineWidth: 0.5)
                 }
 
@@ -17,15 +19,19 @@ struct ProviderBrandMark: View {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
-                    .padding(5)
+                    .padding(compact ? 2.5 : 5)
             } else {
                 Text(kind.shortName)
                     .font(.caption.bold())
                     .foregroundStyle(kind.color)
             }
         }
-        .frame(width: 28, height: 28)
-        .shadow(color: .black.opacity(0.07), radius: 2, y: 1)
+        .frame(width: size, height: size)
+        .shadow(
+            color: .black.opacity(compact ? 0.03 : 0.07),
+            radius: compact ? 1 : 2,
+            y: 1
+        )
         .accessibilityHidden(true)
     }
 

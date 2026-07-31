@@ -7,25 +7,29 @@ struct MenuBarStatusLabel: View {
         HStack(spacing: 5) {
             Image(systemName: "chart.bar.xaxis")
 
-            if let summary = store.menuBarUsageSummary {
-                if store.menuBarDisplayStyle.showsBar {
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(.primary.opacity(0.18))
-                            .frame(width: 30, height: 5)
-                        Capsule()
-                            .fill(barColor(for: summary))
-                            .frame(
-                                width: 30 * summary.usedPercent / 100,
-                                height: 5
-                            )
-                    }
-                }
+            ForEach(store.menuBarUsageSummaries) { summary in
+                HStack(spacing: 3) {
+                    ProviderBrandMark(kind: summary.provider, size: 13, compact: true)
 
-                if store.menuBarDisplayStyle.showsPercent {
-                    Text("\(Int(summary.usedPercent.rounded()))%")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .monospacedDigit()
+                    if store.menuBarDisplayStyle.showsBar {
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(.primary.opacity(0.18))
+                                .frame(width: 30, height: 5)
+                            Capsule()
+                                .fill(barColor(for: summary))
+                                .frame(
+                                    width: 30 * summary.usedPercent / 100,
+                                    height: 5
+                                )
+                        }
+                    }
+
+                    if store.menuBarDisplayStyle.showsPercent {
+                        Text("\(Int(summary.usedPercent.rounded()))%")
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .monospacedDigit()
+                    }
                 }
             }
         }
@@ -34,10 +38,13 @@ struct MenuBarStatusLabel: View {
     }
 
     private var accessibilityText: String {
-        guard let summary = store.menuBarUsageSummary else {
+        let summaries = store.menuBarUsageSummaries
+        guard !summaries.isEmpty else {
             return "UsageBar"
         }
-        return "\(summary.provider.name) \(summary.title) \(Int(summary.usedPercent.rounded()))퍼센트 사용"
+        return summaries.map {
+            "\($0.provider.name) \($0.title) \(Int($0.usedPercent.rounded()))퍼센트 사용"
+        }.joined(separator: ", ")
     }
 
     private func barColor(for summary: MenuBarUsageSummary) -> Color {

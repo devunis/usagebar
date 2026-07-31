@@ -66,6 +66,12 @@ struct SettingsView: View {
                     }
                 }
 
+                Picker("동시 표시", selection: $store.menuBarItemCount) {
+                    Text("1개").tag(1)
+                    Text("2개").tag(2)
+                    Text("3개").tag(3)
+                }
+
                 Picker("표시 방식", selection: $store.menuBarDisplayStyle) {
                     ForEach(MenuBarDisplayStyle.allCases) { style in
                         Text(style.name).tag(style)
@@ -96,7 +102,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 760)
+        .frame(width: 520, height: 790)
     }
 
     private func providerToggle(_ kind: ProviderKind, command: String) -> some View {

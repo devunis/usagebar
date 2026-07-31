@@ -46,6 +46,14 @@ final class UsageStore: ObservableObject {
             )
         }
     }
+    @Published var menuBarItemCount: Int {
+        didSet {
+            UserDefaults.standard.set(
+                min(max(menuBarItemCount, 1), 3),
+                forKey: Defaults.menuBarItemCount
+            )
+        }
+    }
     private var timerTask: Task<Void, Never>?
 
     init() {
@@ -90,6 +98,8 @@ final class UsageStore: ObservableObject {
         menuBarColorStyle = MenuBarColorStyle(
             rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarColorStyle) ?? ""
         ) ?? .provider
+        let savedItemCount = UserDefaults.standard.integer(forKey: Defaults.menuBarItemCount)
+        menuBarItemCount = savedItemCount == 0 ? 2 : min(max(savedItemCount, 1), 3)
         restartTimer()
     }
 
@@ -136,8 +146,8 @@ final class UsageStore: ObservableObject {
         ProviderKind.allCases.filter(enabledProviders.contains)
     }
 
-    var menuBarUsageSummary: MenuBarUsageSummary? {
-        guard enabledDisplayOptions.contains(.menuBarUsage) else { return nil }
+    var menuBarUsageSummaries: [MenuBarUsageSummary] {
+        guard enabledDisplayOptions.contains(.menuBarUsage) else { return [] }
 
         let providers: [ProviderKind]
         if let selected = menuBarProviderSelection.provider {
@@ -146,23 +156,33 @@ final class UsageStore: ObservableObject {
             providers = visibleProviders
         }
 
-        return providers.compactMap { provider -> MenuBarUsageSummary? in
-            guard case .loaded(let snapshot) = states[provider],
-                  let window = snapshot.windows
-                    .filter({
+        let summaries = providers.flatMap { provider -> [MenuBarUsageSummary] in
+            guard case .loaded(let snapshot) = states[provider] else { return [] }
+            return snapshot.windows
+                .filter({
                         enabledWindowKinds.contains($0.kind) &&
                             (menuBarLimitSelection.windowKind == nil ||
                                 menuBarLimitSelection.windowKind == $0.kind)
-                    })
-                    .max(by: { $0.clampedPercent < $1.clampedPercent }) else {
-                return nil
-            }
-            return MenuBarUsageSummary(
-                provider: provider,
-                title: window.title,
-                usedPercent: window.clampedPercent
-            )
-        }.max(by: { $0.usedPercent < $1.usedPercent })
+                })
+                .map { window in
+                    MenuBarUsageSummary(
+                        id: "\(provider.rawValue)-\(window.id)",
+                        provider: provider,
+                        title: window.title,
+                        usedPercent: window.clampedPercent
+                    )
+                }
+        }
+
+        return Array(
+            summaries
+                .sorted { $0.usedPercent > $1.usedPercent }
+                .prefix(menuBarItemCount)
+        )
+    }
+
+    var menuBarUsageSummary: MenuBarUsageSummary? {
+        menuBarUsageSummaries.first
     }
 
     func isEnabled(_ kind: ProviderKind) -> Bool {
@@ -283,5 +303,6 @@ final class UsageStore: ObservableObject {
         static let menuBarLimit = "menuBarLimitSelection"
         static let menuBarDisplayStyle = "menuBarDisplayStyle"
         static let menuBarColorStyle = "menuBarColorStyle"
+        static let menuBarItemCount = "menuBarItemCount"
     }
 }

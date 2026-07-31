@@ -43,6 +43,9 @@ struct ClaudeQuotaProvider: QuotaProvider {
             return QuotaWindow(
                 id: key,
                 title: title,
+                kind: key == "five_hour"
+                    ? .shortTerm
+                    : (key == "seven_day" ? .weekly : .modelScoped),
                 usedPercent: utilization,
                 durationMinutes: key == "five_hour" ? 300 : 10_080,
                 resetsAt: reset
@@ -64,6 +67,7 @@ struct ClaudeQuotaProvider: QuotaProvider {
                 return QuotaWindow(
                     id: "weekly-scoped-\(cleanName.lowercased())",
                     title: "\(cleanName) 주간",
+                    kind: .modelScoped,
                     usedPercent: percent,
                     durationMinutes: 10_080,
                     resetsAt: reset

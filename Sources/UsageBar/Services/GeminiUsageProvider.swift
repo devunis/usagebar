@@ -95,6 +95,7 @@ struct GeminiQuotaProvider: QuotaProvider {
             QuotaWindow(
                 id: model,
                 title: model.replacingOccurrences(of: "gemini-", with: "Gemini "),
+                kind: .modelScoped,
                 usedPercent: (1 - value.remaining) * 100,
                 durationMinutes: nil,
                 resetsAt: value.reset

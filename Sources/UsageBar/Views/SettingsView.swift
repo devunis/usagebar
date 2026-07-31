@@ -5,7 +5,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("연결 방식") {
+            Section("서비스") {
                 Text("API 키를 저장하지 않습니다. 각 공식 CLI에 로그인된 계정의 한도만 읽습니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -13,6 +13,39 @@ struct SettingsView: View {
                 providerToggle(.codex, command: "codex login")
                 providerToggle(.anthropic, command: "claude auth login")
                 providerToggle(.gemini, command: "gemini")
+
+                HStack {
+                    Button("모두 켜기") {
+                        store.setAllProviders(true)
+                    }
+                    Button("모두 끄기") {
+                        store.setAllProviders(false)
+                    }
+                }
+            }
+
+            Section("표시 항목") {
+                ForEach(QuotaWindowKind.allCases) { kind in
+                    Toggle(kind.name, isOn: Binding(
+                        get: { store.isWindowKindEnabled(kind) },
+                        set: { store.setWindowKindEnabled($0, for: kind) }
+                    ))
+                }
+                ForEach(DisplayOption.allCases) { option in
+                    Toggle(option.name, isOn: Binding(
+                        get: { store.isDisplayOptionEnabled(option) },
+                        set: { store.setDisplayOptionEnabled($0, for: option) }
+                    ))
+                }
+
+                HStack {
+                    Button("모두 표시") {
+                        store.setAllDisplayItems(true)
+                    }
+                    Button("모두 숨기기") {
+                        store.setAllDisplayItems(false)
+                    }
+                }
             }
 
             Section("자동 새로고침") {
@@ -32,7 +65,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 390)
+        .frame(width: 520, height: 650)
     }
 
     private func providerToggle(_ kind: ProviderKind, command: String) -> some View {

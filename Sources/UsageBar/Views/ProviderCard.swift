@@ -3,6 +3,8 @@ import SwiftUI
 struct ProviderCard: View {
     let kind: ProviderKind
     let state: ProviderState
+    let enabledWindowKinds: Set<QuotaWindowKind>
+    let enabledDisplayOptions: Set<DisplayOption>
     let refresh: () -> Void
 
     var body: some View {
@@ -41,17 +43,28 @@ struct ProviderCard: View {
     private var content: some View {
         switch state {
         case .loaded(let snapshot):
-            if let plan = snapshot.plan, !plan.isEmpty {
+            if enabledDisplayOptions.contains(.plan),
+               let plan = snapshot.plan, !plan.isEmpty {
                 Text(plan.uppercased())
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            ForEach(snapshot.windows) { window in
+            let visibleWindows = snapshot.windows.filter {
+                enabledWindowKinds.contains($0.kind)
+            }
+            ForEach(visibleWindows) { window in
                 quotaRow(window)
             }
-            Text("\(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened)) 갱신")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            if visibleWindows.isEmpty {
+                Text("설정에서 표시할 한도 항목을 선택해 주세요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if enabledDisplayOptions.contains(.lastUpdated) {
+                Text("\(snapshot.fetchedAt.formatted(date: .omitted, time: .shortened)) 갱신")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
         case .needsConfiguration(let message):
             stateMessage(message, icon: "person.crop.circle.badge.exclamationmark")
@@ -83,7 +96,7 @@ struct ProviderCard: View {
             }
             ProgressView(value: window.clampedPercent, total: 100)
                 .tint(progressColor(window.clampedPercent))
-            if let reset = window.resetsAt {
+            if enabledDisplayOptions.contains(.resetTime), let reset = window.resetsAt {
                 Text("리셋 \(reset.formatted(.relative(presentation: .named))) · \(reset.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)

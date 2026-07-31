@@ -123,6 +123,7 @@ struct CodexQuotaProvider: QuotaProvider {
                 windows.append(QuotaWindow(
                     id: "\(limitID)-\(key)",
                     title: title,
+                    kind: (duration ?? 0) >= 10_080 ? .weekly : .shortTerm,
                     usedPercent: used,
                     durationMinutes: duration,
                     resetsAt: resetSeconds.map(Date.init(timeIntervalSince1970:))

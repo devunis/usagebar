@@ -33,9 +33,42 @@ enum ProviderKind: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
+enum QuotaWindowKind: String, CaseIterable, Identifiable, Sendable {
+    case shortTerm
+    case weekly
+    case modelScoped
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .shortTerm: "단기 한도"
+        case .weekly: "전체 주간 한도"
+        case .modelScoped: "모델별 한도"
+        }
+    }
+}
+
+enum DisplayOption: String, CaseIterable, Identifiable, Sendable {
+    case plan
+    case resetTime
+    case lastUpdated
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .plan: "플랜 이름"
+        case .resetTime: "리셋 시간"
+        case .lastUpdated: "마지막 갱신 시간"
+        }
+    }
+}
+
 struct QuotaWindow: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
+    let kind: QuotaWindowKind
     let usedPercent: Double
     let durationMinutes: Int?
     let resetsAt: Date?

@@ -12,6 +12,8 @@ final class UsageStore: ObservableObject {
         }
     }
     @Published private(set) var enabledProviders: Set<ProviderKind>
+    @Published private(set) var enabledWindowKinds: Set<QuotaWindowKind>
+    @Published private(set) var enabledDisplayOptions: Set<DisplayOption>
     private var timerTask: Task<Void, Never>?
 
     init() {
@@ -23,6 +25,16 @@ final class UsageStore: ObservableObject {
             enabledProviders = Set(savedProviders.compactMap(ProviderKind.init(rawValue:)))
         } else {
             enabledProviders = [.codex, .anthropic]
+        }
+        if let savedKinds = UserDefaults.standard.stringArray(forKey: Defaults.windowKinds) {
+            enabledWindowKinds = Set(savedKinds.compactMap(QuotaWindowKind.init(rawValue:)))
+        } else {
+            enabledWindowKinds = Set(QuotaWindowKind.allCases)
+        }
+        if let savedOptions = UserDefaults.standard.stringArray(forKey: Defaults.displayOptions) {
+            enabledDisplayOptions = Set(savedOptions.compactMap(DisplayOption.init(rawValue:)))
+        } else {
+            enabledDisplayOptions = Set(DisplayOption.allCases)
         }
         restartTimer()
     }
@@ -82,11 +94,86 @@ final class UsageStore: ObservableObject {
             enabledProviders.remove(kind)
             states[kind] = .idle
         }
+        saveProviders()
+    }
+
+    func setAllProviders(_ enabled: Bool) {
+        enabledProviders = enabled ? Set(ProviderKind.allCases) : []
+        if enabled {
+            refreshAll()
+        } else {
+            states = Dictionary(
+                uniqueKeysWithValues: ProviderKind.allCases.map { ($0, .idle) }
+            )
+        }
+        saveProviders()
+    }
+
+    func isWindowKindEnabled(_ kind: QuotaWindowKind) -> Bool {
+        enabledWindowKinds.contains(kind)
+    }
+
+    func setWindowKindEnabled(_ enabled: Bool, for kind: QuotaWindowKind) {
+        if enabled {
+            enabledWindowKinds.insert(kind)
+        } else {
+            enabledWindowKinds.remove(kind)
+        }
+        save(
+            enabledWindowKinds,
+            allCases: QuotaWindowKind.allCases,
+            key: Defaults.windowKinds
+        )
+    }
+
+    func isDisplayOptionEnabled(_ option: DisplayOption) -> Bool {
+        enabledDisplayOptions.contains(option)
+    }
+
+    func setDisplayOptionEnabled(_ enabled: Bool, for option: DisplayOption) {
+        if enabled {
+            enabledDisplayOptions.insert(option)
+        } else {
+            enabledDisplayOptions.remove(option)
+        }
+        save(
+            enabledDisplayOptions,
+            allCases: DisplayOption.allCases,
+            key: Defaults.displayOptions
+        )
+    }
+
+    func setAllDisplayItems(_ enabled: Bool) {
+        enabledWindowKinds = enabled ? Set(QuotaWindowKind.allCases) : []
+        enabledDisplayOptions = enabled ? Set(DisplayOption.allCases) : []
+        save(
+            enabledWindowKinds,
+            allCases: QuotaWindowKind.allCases,
+            key: Defaults.windowKinds
+        )
+        save(
+            enabledDisplayOptions,
+            allCases: DisplayOption.allCases,
+            key: Defaults.displayOptions
+        )
+    }
+
+    private func saveProviders() {
+        save(
+            enabledProviders,
+            allCases: ProviderKind.allCases,
+            key: Defaults.enabledProviders
+        )
+    }
+
+    private func save<Value: RawRepresentable & Hashable>(
+        _ values: Set<Value>,
+        allCases: [Value],
+        key: String
+    ) where Value.RawValue == String {
         UserDefaults.standard.set(
-            ProviderKind.allCases
-                .filter(enabledProviders.contains)
-                .map(\.rawValue),
-            forKey: Defaults.enabledProviders
+            allCases.filter(values.contains).map(\.rawValue),
+            forKey: key
         )
     }
 
@@ -106,5 +193,7 @@ final class UsageStore: ObservableObject {
     private enum Defaults {
         static let refreshInterval = "refreshIntervalMinutes"
         static let enabledProviders = "enabledProviders"
+        static let windowKinds = "enabledWindowKinds"
+        static let displayOptions = "enabledDisplayOptions"
     }
 }

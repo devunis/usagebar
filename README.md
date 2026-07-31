@@ -1,6 +1,6 @@
 # UsageBar
 
-ChatGPT/Codex, Claude, Gemini 구독 계정의 현재 한도와 리셋 시간을 보여주는 네이티브 macOS 메뉴바 앱입니다. 메뉴바에는 서비스당 한 항목씩 실제 서비스 마크와 5칸 미니 막대를 사용해 최대 3개 서비스를 동시에 표시합니다. Claude는 5시간, 전체 주간, Fable 등 모델별 한도 중 메뉴바에 표시할 항목을 설정에서 선택할 수 있습니다.
+ChatGPT/Codex, Claude, Gemini 구독 계정의 현재 한도와 리셋 시간을 보여주는 네이티브 macOS 메뉴바 앱입니다. 메뉴바에는 서비스당 한 항목씩 실제 서비스 마크와 컬러 테두리, 5칸 컬러 막대를 사용해 최대 3개 서비스를 동시에 표시합니다. Claude는 5시간, 전체 주간, Fable 등 모델별 한도 중 메뉴바에 표시할 항목을 설정에서 선택할 수 있습니다.
 
 각 서비스 카드는 실제 OpenAI, Claude, Gemini 벡터 심볼을 사용합니다. 상표는 각 소유자에게 있으며 UsageBar와의 제휴나 보증을 의미하지 않습니다. 아이콘 출처와 라이선스는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인해 주세요.
 

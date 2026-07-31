@@ -32,9 +32,19 @@ final class UsageStore: ObservableObject {
             enabledWindowKinds = Set(QuotaWindowKind.allCases)
         }
         if let savedOptions = UserDefaults.standard.stringArray(forKey: Defaults.displayOptions) {
-            enabledDisplayOptions = Set(savedOptions.compactMap(DisplayOption.init(rawValue:)))
+            var options = Set(savedOptions.compactMap(DisplayOption.init(rawValue:)))
+            if !UserDefaults.standard.bool(forKey: Defaults.didAddMenuBarUsage) {
+                options.insert(.menuBarUsage)
+                UserDefaults.standard.set(true, forKey: Defaults.didAddMenuBarUsage)
+                UserDefaults.standard.set(
+                    DisplayOption.allCases.filter(options.contains).map(\.rawValue),
+                    forKey: Defaults.displayOptions
+                )
+            }
+            enabledDisplayOptions = options
         } else {
             enabledDisplayOptions = Set(DisplayOption.allCases)
+            UserDefaults.standard.set(true, forKey: Defaults.didAddMenuBarUsage)
         }
         restartTimer()
     }
@@ -80,6 +90,24 @@ final class UsageStore: ObservableObject {
 
     var visibleProviders: [ProviderKind] {
         ProviderKind.allCases.filter(enabledProviders.contains)
+    }
+
+    var menuBarUsageSummary: MenuBarUsageSummary? {
+        guard enabledDisplayOptions.contains(.menuBarUsage) else { return nil }
+
+        return visibleProviders.compactMap { provider -> MenuBarUsageSummary? in
+            guard case .loaded(let snapshot) = states[provider],
+                  let window = snapshot.windows
+                    .filter({ enabledWindowKinds.contains($0.kind) })
+                    .max(by: { $0.clampedPercent < $1.clampedPercent }) else {
+                return nil
+            }
+            return MenuBarUsageSummary(
+                provider: provider,
+                title: window.title,
+                usedPercent: window.clampedPercent
+            )
+        }.max(by: { $0.usedPercent < $1.usedPercent })
     }
 
     func isEnabled(_ kind: ProviderKind) -> Bool {
@@ -195,5 +223,6 @@ final class UsageStore: ObservableObject {
         static let enabledProviders = "enabledProviders"
         static let windowKinds = "enabledWindowKinds"
         static let displayOptions = "enabledDisplayOptions"
+        static let didAddMenuBarUsage = "didAddMenuBarUsageOption"
     }
 }

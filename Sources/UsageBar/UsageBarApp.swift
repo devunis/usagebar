@@ -17,8 +17,7 @@ struct UsageBarApp: App {
             MenuContentView()
                 .environmentObject(store)
         } label: {
-            Image(systemName: "chart.bar.xaxis")
-                .accessibilityLabel("UsageBar")
+            MenuBarStatusLabel(store: store)
         }
         .menuBarExtraStyle(.window)
 

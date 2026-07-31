@@ -50,6 +50,7 @@ enum QuotaWindowKind: String, CaseIterable, Identifiable, Sendable {
 }
 
 enum DisplayOption: String, CaseIterable, Identifiable, Sendable {
+    case menuBarUsage
     case plan
     case resetTime
     case lastUpdated
@@ -58,11 +59,18 @@ enum DisplayOption: String, CaseIterable, Identifiable, Sendable {
 
     var name: String {
         switch self {
+        case .menuBarUsage: "메뉴바 사용량"
         case .plan: "플랜 이름"
         case .resetTime: "리셋 시간"
         case .lastUpdated: "마지막 갱신 시간"
         }
     }
+}
+
+struct MenuBarUsageSummary: Equatable, Sendable {
+    let provider: ProviderKind
+    let title: String
+    let usedPercent: Double
 }
 
 struct QuotaWindow: Identifiable, Equatable, Sendable {

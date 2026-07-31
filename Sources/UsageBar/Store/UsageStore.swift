@@ -107,13 +107,13 @@ final class UsageStore: ObservableObject {
         timerTask?.cancel()
     }
 
-    func refreshAll() {
+    func refreshAll(allowsCredentialPrompt: Bool = false) {
         for kind in visibleProviders {
-            refresh(kind)
+            refresh(kind, allowsCredentialPrompt: allowsCredentialPrompt)
         }
     }
 
-    func refresh(_ kind: ProviderKind) {
+    func refresh(_ kind: ProviderKind, allowsCredentialPrompt: Bool = false) {
         guard enabledProviders.contains(kind) else { return }
         states[kind] = .loading
 
@@ -123,7 +123,9 @@ final class UsageStore: ObservableObject {
                 case .codex:
                     CodexQuotaProvider()
                 case .anthropic:
-                    ClaudeQuotaProvider()
+                    ClaudeQuotaProvider(
+                        allowsKeychainInteraction: allowsCredentialPrompt
+                    )
                 case .gemini:
                     GeminiQuotaProvider()
                 }

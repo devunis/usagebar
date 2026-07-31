@@ -18,6 +18,9 @@ struct UsageBarApp: App {
                 .environmentObject(store)
         } label: {
             MenuBarStatusLabel(store: store)
+                .task {
+                    store.refreshAll()
+                }
         }
         .menuBarExtraStyle(.window)
 

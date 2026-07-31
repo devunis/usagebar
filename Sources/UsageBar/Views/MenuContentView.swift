@@ -17,7 +17,7 @@ struct MenuContentView: View {
                 }
                 Spacer()
                 Button {
-                    store.refreshAll()
+                    store.refreshAll(allowsCredentialPrompt: true)
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -31,7 +31,9 @@ struct MenuContentView: View {
                     state: store.states[kind] ?? .idle,
                     enabledWindowKinds: store.enabledWindowKinds,
                     enabledDisplayOptions: store.enabledDisplayOptions,
-                    refresh: { store.refresh(kind) }
+                    refresh: {
+                        store.refresh(kind, allowsCredentialPrompt: true)
+                    }
                 )
             }
 

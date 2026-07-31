@@ -45,7 +45,7 @@ open UsageBar.app
 ## 구현 방식
 
 - Codex: 공식 `codex app-server` JSON-RPC의 `account/rateLimits/read`
-- Claude: Claude CLI가 저장한 OAuth 자격 증명으로 Anthropic usage 응답 조회
+- Claude: Claude CLI가 저장한 OAuth 자격 증명으로 Anthropic usage 응답 조회. 자동 갱신과 서비스 켜기는 Keychain 대화상자를 띄우지 않으며, 사용자가 새로고침을 직접 누른 경우에만 접근 권한을 요청합니다.
 - Gemini: Gemini CLI OAuth 자격 증명으로 Code Assist quota 응답 조회
 
 ## 알려진 제한

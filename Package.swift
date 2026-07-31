@@ -14,6 +14,7 @@ let package = Package(
         .executableTarget(
             name: "UsageBar",
             linkerSettings: [
+                .linkedFramework("LocalAuthentication"),
                 .linkedFramework("Security")
             ]
         ),

@@ -1,18 +1,29 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 struct ClaudeQuotaProvider: QuotaProvider {
     let kind = ProviderKind.anthropic
     let client: HTTPClient
+    let allowsKeychainInteraction: Bool
 
-    init(client: HTTPClient = HTTPClient()) {
+    init(
+        client: HTTPClient = HTTPClient(),
+        allowsKeychainInteraction: Bool = false
+    ) {
         self.client = client
+        self.allowsKeychainInteraction = allowsKeychainInteraction
     }
 
     func fetchQuota() async throws -> QuotaSnapshot {
-        guard let token = Self.oauthToken() else {
+        guard let token = Self.oauthToken(
+            allowsKeychainInteraction: allowsKeychainInteraction
+        ) else {
+            let message = allowsKeychainInteraction
+                ? "Claude CLI 로그인이 필요합니다: claude auth login"
+                : "Claude 카드의 새로고침 버튼을 눌러 Keychain 접근을 허용해 주세요."
             throw UsageProviderError.missingCredential(
-                "Claude CLI 로그인이 필요합니다: claude auth login"
+                message
             )
         }
         guard let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else {
@@ -87,7 +98,7 @@ struct ClaudeQuotaProvider: QuotaProvider {
         )
     }
 
-    private static func oauthToken() -> String? {
+    private static func oauthToken(allowsKeychainInteraction: Bool) -> String? {
         let credentials = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/.credentials.json")
         if let data = try? Data(contentsOf: credentials),
@@ -95,11 +106,14 @@ struct ClaudeQuotaProvider: QuotaProvider {
             return token
         }
 
+        let authenticationContext = LAContext()
+        authenticationContext.interactionNotAllowed = !allowsKeychainInteraction
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "Claude Code-credentials",
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseAuthenticationContext as String: authenticationContext
         ]
         var result: CFTypeRef?
         if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,

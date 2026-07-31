@@ -97,7 +97,7 @@ struct SettingsView: View {
 
             Section {
                 Button("지금 모두 새로고침") {
-                    store.refreshAll()
+                    store.refreshAll(allowsCredentialPrompt: true)
                 }
             }
         }

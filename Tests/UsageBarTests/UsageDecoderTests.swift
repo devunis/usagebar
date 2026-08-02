@@ -128,8 +128,7 @@ final class UsageDecoderTests: XCTestCase {
 
         XCTAssertEqual(segments.count, 3)
         XCTAssertEqual(segments.map(\.percentText), ["56%", "34%", "14%"])
-        XCTAssertEqual(segments.map(\.filledCount), [3, 2, 1])
-        XCTAssertEqual(segments.map(\.emptyCount), [2, 3, 4])
+        XCTAssertEqual(segments.map(\.fillFraction), [0.56, 0.34, 0.14])
     }
 
     func testClaudeMenuBarSelectsOneConfiguredWindow() throws {

@@ -3,8 +3,7 @@ import SwiftUI
 
 struct MenuBarStatusSegment: Equatable {
     let summary: MenuBarUsageSummary
-    let filledCount: Int
-    let emptyCount: Int
+    let fillFraction: CGFloat
     let percentText: String
 }
 
@@ -12,11 +11,9 @@ func makeMenuBarStatusSegments(
     from summaries: [MenuBarUsageSummary]
 ) -> [MenuBarStatusSegment] {
     summaries.map { summary in
-        let filledCount = min(5, max(0, Int((summary.usedPercent / 20).rounded())))
         return MenuBarStatusSegment(
             summary: summary,
-            filledCount: filledCount,
-            emptyCount: 5 - filledCount,
+            fillFraction: min(1, max(0, summary.usedPercent / 100)),
             percentText: "\(Int(summary.usedPercent.rounded()))%"
         )
     }
@@ -116,27 +113,31 @@ struct MenuBarStatusLabel: View {
         )
 
         if showsBar {
-            let slotWidth: CGFloat = 4.8
-            let slotGap: CGFloat = 0.8
-            let slotY: CGFloat = 5
-            for index in 0..<5 {
-                let slotRect = NSRect(
-                    x: 18 + CGFloat(index) * (slotWidth + slotGap),
-                    y: slotY,
-                    width: slotWidth,
-                    height: 5
-                )
-                let slot = NSBezierPath(
-                    roundedRect: slotRect,
-                    xRadius: 1.5,
-                    yRadius: 1.5
-                )
-                if index < status.filledCount {
-                    statusColor(for: summary).setFill()
-                } else {
-                    NSColor.labelColor.withAlphaComponent(0.18).setFill()
-                }
-                slot.fill()
+            let trackRect = NSRect(x: 18, y: 4.5, width: 28, height: 6)
+            let track = NSBezierPath(
+                roundedRect: trackRect,
+                xRadius: trackRect.height / 2,
+                yRadius: trackRect.height / 2
+            )
+
+            statusColor(for: summary).withAlphaComponent(0.22).setFill()
+            track.fill()
+
+            statusColor(for: summary).withAlphaComponent(0.65).setStroke()
+            track.lineWidth = 0.75
+            track.stroke()
+
+            if status.fillFraction > 0 {
+                NSGraphicsContext.saveGraphicsState()
+                track.addClip()
+                statusColor(for: summary).setFill()
+                NSRect(
+                    x: trackRect.minX,
+                    y: trackRect.minY,
+                    width: max(1.5, trackRect.width * status.fillFraction),
+                    height: trackRect.height
+                ).fill()
+                NSGraphicsContext.restoreGraphicsState()
             }
         }
 

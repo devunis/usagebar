@@ -22,6 +22,17 @@ struct SettingsView: View {
                         store.setAllProviders(false)
                     }
                 }
+
+                if store.isEnabled(.anthropic) {
+                    Button {
+                        store.refresh(
+                            .anthropic,
+                            allowsCredentialPrompt: true
+                        )
+                    } label: {
+                        Label("Claude Keychain 권한 요청", systemImage: "key")
+                    }
+                }
             }
 
             Section("표시 항목") {
@@ -103,7 +114,7 @@ struct SettingsView: View {
 
             Section {
                 Button("지금 모두 새로고침") {
-                    store.refreshAll(allowsCredentialPrompt: true)
+                    store.refreshAll()
                 }
             }
         }

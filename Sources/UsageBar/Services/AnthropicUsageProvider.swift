@@ -2,6 +2,24 @@ import Foundation
 import LocalAuthentication
 import Security
 
+private actor ClaudeTokenCache {
+    static let shared = ClaudeTokenCache()
+
+    private var token: String?
+
+    func value() -> String? {
+        token
+    }
+
+    func store(_ token: String) {
+        self.token = token
+    }
+
+    func clear() {
+        token = nil
+    }
+}
+
 struct ClaudeQuotaProvider: QuotaProvider {
     let kind = ProviderKind.anthropic
     let client: HTTPClient
@@ -16,12 +34,18 @@ struct ClaudeQuotaProvider: QuotaProvider {
     }
 
     func fetchQuota() async throws -> QuotaSnapshot {
-        guard let token = Self.oauthToken(
+        let token: String
+        if let cachedToken = await ClaudeTokenCache.shared.value() {
+            token = cachedToken
+        } else if let credentialToken = Self.oauthToken(
             allowsKeychainInteraction: allowsKeychainInteraction
-        ) else {
+        ) {
+            token = credentialToken
+            await ClaudeTokenCache.shared.store(credentialToken)
+        } else {
             let message = allowsKeychainInteraction
-                ? "Claude CLI 로그인이 필요합니다: claude auth login"
-                : "Claude 카드의 새로고침 버튼을 눌러 Keychain 접근을 허용해 주세요."
+                ? "Claude CLI 로그인 또는 Keychain 권한을 확인해 주세요."
+                : "Claude Keychain 권한이 필요합니다. ‘권한 허용’을 눌러 주세요."
             throw UsageProviderError.missingCredential(
                 message
             )
@@ -32,8 +56,15 @@ struct ClaudeQuotaProvider: QuotaProvider {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        let data = try await client.data(for: request)
-        return try Self.parse(data)
+        do {
+            let data = try await client.data(for: request)
+            return try Self.parse(data)
+        } catch let error as UsageProviderError {
+            if case .unauthorized = error {
+                await ClaudeTokenCache.shared.clear()
+            }
+            throw error
+        }
     }
 
     static func parse(_ data: Data) throws -> QuotaSnapshot {

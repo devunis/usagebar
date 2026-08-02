@@ -7,6 +7,7 @@ struct ProviderCard: View {
     let enabledWindowKinds: Set<QuotaWindowKind>
     let enabledDisplayOptions: Set<DisplayOption>
     let refresh: () -> Void
+    let requestCredentialAccess: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -65,6 +66,13 @@ struct ProviderCard: View {
 
         case .needsConfiguration(let message):
             stateMessage(message, icon: "person.crop.circle.badge.exclamationmark")
+            if let requestCredentialAccess {
+                Button(action: requestCredentialAccess) {
+                    Label("Claude 권한 허용", systemImage: "key")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
 
         case .failed(let message):
             stateMessage(message, icon: "exclamationmark.triangle")

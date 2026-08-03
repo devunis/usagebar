@@ -42,7 +42,7 @@ struct MenuBarStatusLabel: View {
         guard !segments.isEmpty else { return nil }
 
         let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-        let graphicWidth: CGFloat = store.menuBarDisplayStyle.showsBar ? 47 : 15
+        let graphicWidth: CGFloat = store.menuBarDisplayStyle.showsBar ? 51 : 15
         let textGap: CGFloat = store.menuBarDisplayStyle.showsPercent ? 4 : 0
         let segmentGap: CGFloat = 10
         let percentWidths = segments.map { status -> CGFloat in
@@ -102,39 +102,30 @@ struct MenuBarStatusLabel: View {
         let summary = status.summary
         let kind = summary.provider
         let showsBar = store.menuBarDisplayStyle.showsBar
-        let badgeRect = NSRect(
-            x: origin.x + 0.5,
-            y: origin.y + 1,
-            width: 14,
-            height: 14
-        )
-        brandBackground(for: kind).setFill()
-        NSBezierPath(
-            roundedRect: badgeRect,
-            xRadius: 4,
-            yRadius: 4
-        ).fill()
-        providerColor(for: kind).setStroke()
-        let badgeBorder = NSBezierPath(
-            roundedRect: badgeRect.insetBy(dx: 0.5, dy: 0.5),
-            xRadius: 3.5,
-            yRadius: 3.5
-        )
-        badgeBorder.lineWidth = 1
-        badgeBorder.stroke()
 
         if let source = brandImage(for: kind) {
+            let markRect = NSRect(
+                x: origin.x + 0.5,
+                y: origin.y + 1.5,
+                width: 13,
+                height: 13
+            )
             source.draw(
-                in: NSRect(x: origin.x + 3, y: origin.y + 3.5, width: 9, height: 9),
+                in: markRect,
                 from: .zero,
                 operation: .sourceOver,
                 fraction: 1
             )
+
+            if kind == .codex {
+                NSColor.labelColor.setFill()
+                markRect.fill(using: .sourceIn)
+            }
         }
 
         if showsBar {
             let trackRect = NSRect(
-                x: origin.x + 18,
+                x: origin.x + 22,
                 y: origin.y + 5,
                 width: 28,
                 height: 6
@@ -178,17 +169,6 @@ struct MenuBarStatusLabel: View {
             .appendingPathComponent("BrandMarks", isDirectory: true)
             .appendingPathComponent("\(assetName).svg")
         return NSImage(contentsOf: url)
-    }
-
-    private func brandBackground(for kind: ProviderKind) -> NSColor {
-        switch kind {
-        case .codex:
-            .white
-        case .anthropic:
-            NSColor(srgbRed: 1, green: 0.96, blue: 0.91, alpha: 1)
-        case .gemini:
-            NSColor(srgbRed: 0.95, green: 0.97, blue: 1, alpha: 1)
-        }
     }
 
     private func providerColor(for kind: ProviderKind) -> NSColor {

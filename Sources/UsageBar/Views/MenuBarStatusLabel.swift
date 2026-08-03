@@ -23,41 +23,66 @@ struct MenuBarStatusLabel: View {
     @ObservedObject var store: UsageStore
 
     var body: some View {
-        statusText
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .monospacedDigit()
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
+        Group {
+            if let statusImage {
+                Image(nsImage: statusImage)
+                    .renderingMode(.original)
+            } else {
+                Image(systemName: "chart.bar.xaxis")
+            }
+        }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
     }
 
-    private var statusText: Text {
+    private var statusImage: NSImage? {
         let segments = makeMenuBarStatusSegments(from: store.menuBarUsageSummaries)
-        guard !segments.isEmpty else {
-            return Text(Image(systemName: "chart.bar.xaxis"))
+        guard !segments.isEmpty else { return nil }
+
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        let graphicWidth: CGFloat = store.menuBarDisplayStyle.showsBar ? 47 : 15
+        let textGap: CGFloat = store.menuBarDisplayStyle.showsPercent ? 4 : 0
+        let segmentGap: CGFloat = 10
+        let percentWidths = segments.map { status -> CGFloat in
+            guard store.menuBarDisplayStyle.showsPercent else { return 0 }
+            return ceil((status.percentText as NSString).size(withAttributes: [.font: font]).width)
         }
 
-        return segments.enumerated().reduce(Text("")) { result, element in
-            let (index, status) = element
-            let summary = status.summary
-            var segment = index == 0 ? Text("") : Text("  ")
+        let contentWidth = segments.indices.reduce(CGFloat.zero) { width, index in
+            width + graphicWidth + textGap + percentWidths[index]
+        } + segmentGap * CGFloat(max(0, segments.count - 1))
+        let size = NSSize(width: ceil(contentWidth), height: 16)
+        let result = NSImage(size: size, flipped: false) { _ in
+            var x: CGFloat = 0
 
-            if let graphic = statusGraphic(for: status) {
-                segment = segment + Text(Image(nsImage: graphic))
-            } else {
-                segment = segment + Text(summary.provider.shortName)
+            for (index, status) in segments.enumerated() {
+                if index > 0 { x += segmentGap }
+
+                drawStatusGraphic(for: status, at: NSPoint(x: x, y: 0))
+                x += graphicWidth
+
+                guard store.menuBarDisplayStyle.showsPercent else { continue }
+                x += textGap
+
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: statusColor(for: status.summary)
+                ]
+                let text = status.percentText as NSString
+                let textSize = text.size(withAttributes: attributes)
+                text.draw(
+                    at: NSPoint(x: x, y: floor((size.height - textSize.height) / 2)),
+                    withAttributes: attributes
+                )
+                x += percentWidths[index]
             }
 
-            if store.menuBarDisplayStyle.showsPercent {
-                segment = segment
-                    + Text(" ")
-                    + Text(status.percentText)
-                        .foregroundColor(Color(nsColor: statusColor(for: summary)))
-            }
-
-            return result + segment
+            return true
         }
+        result.isTemplate = false
+        return result
     }
 
     private var accessibilityText: String {
@@ -70,26 +95,19 @@ struct MenuBarStatusLabel: View {
         }.joined(separator: ", ")
     }
 
-    private func statusGraphic(for status: MenuBarStatusSegment) -> NSImage? {
+    private func drawStatusGraphic(
+        for status: MenuBarStatusSegment,
+        at origin: NSPoint
+    ) {
         let summary = status.summary
         let kind = summary.provider
-        guard let resources = Bundle.main.resourceURL else { return nil }
-        let assetName = switch kind {
-        case .codex: "openai"
-        case .anthropic: "claude"
-        case .gemini: "gemini"
-        }
-        let url = resources
-            .appendingPathComponent("BrandMarks", isDirectory: true)
-            .appendingPathComponent("\(assetName).svg")
-        guard let source = NSImage(contentsOf: url) else { return nil }
-
         let showsBar = store.menuBarDisplayStyle.showsBar
-        let size = NSSize(width: showsBar ? 47 : 15, height: 15)
-        let result = NSImage(size: size)
-        result.lockFocus()
-
-        let badgeRect = NSRect(x: 0.5, y: 0.5, width: 14, height: 14)
+        let badgeRect = NSRect(
+            x: origin.x + 0.5,
+            y: origin.y + 1,
+            width: 14,
+            height: 14
+        )
         brandBackground(for: kind).setFill()
         NSBezierPath(
             roundedRect: badgeRect,
@@ -105,15 +123,22 @@ struct MenuBarStatusLabel: View {
         badgeBorder.lineWidth = 1
         badgeBorder.stroke()
 
-        source.draw(
-            in: NSRect(x: 3, y: 3, width: 9, height: 9),
-            from: .zero,
-            operation: .sourceOver,
-            fraction: 1
-        )
+        if let source = brandImage(for: kind) {
+            source.draw(
+                in: NSRect(x: origin.x + 3, y: origin.y + 3.5, width: 9, height: 9),
+                from: .zero,
+                operation: .sourceOver,
+                fraction: 1
+            )
+        }
 
         if showsBar {
-            let trackRect = NSRect(x: 18, y: 4.5, width: 28, height: 6)
+            let trackRect = NSRect(
+                x: origin.x + 18,
+                y: origin.y + 5,
+                width: 28,
+                height: 6
+            )
             let track = NSBezierPath(
                 roundedRect: trackRect,
                 xRadius: trackRect.height / 2,
@@ -140,10 +165,19 @@ struct MenuBarStatusLabel: View {
                 NSGraphicsContext.restoreGraphicsState()
             }
         }
+    }
 
-        result.unlockFocus()
-        result.isTemplate = false
-        return result
+    private func brandImage(for kind: ProviderKind) -> NSImage? {
+        guard let resources = Bundle.main.resourceURL else { return nil }
+        let assetName = switch kind {
+        case .codex: "openai"
+        case .anthropic: "claude"
+        case .gemini: "gemini"
+        }
+        let url = resources
+            .appendingPathComponent("BrandMarks", isDirectory: true)
+            .appendingPathComponent("\(assetName).svg")
+        return NSImage(contentsOf: url)
     }
 
     private func brandBackground(for kind: ProviderKind) -> NSColor {

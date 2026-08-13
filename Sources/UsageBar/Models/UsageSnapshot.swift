@@ -121,23 +121,30 @@ enum MenuBarLimitSelection: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum MenuBarDisplayStyle: String, CaseIterable, Identifiable, Sendable {
-    case barAndPercent
-    case barOnly
-    case percentOnly
+enum MenuBarIconStyle: String, CaseIterable, Identifiable, Sendable {
+    case battery
+    case circular
+    case minimal
+    case segments
+    case dualBar
+    case gauge
 
     var id: String { rawValue }
 
     var name: String {
         switch self {
-        case .barAndPercent: "막대 + 퍼센트"
-        case .barOnly: "막대만"
-        case .percentOnly: "퍼센트만"
+        case .battery: "막대형"
+        case .circular: "원형"
+        case .minimal: "미니멀"
+        case .segments: "세그먼트"
+        case .dualBar: "이중 막대"
+        case .gauge: "게이지"
         }
     }
 
-    var showsBar: Bool { self != .percentOnly }
-    var showsPercent: Bool { self != .barOnly }
+    var showsExternalPercent: Bool {
+        self == .battery || self == .minimal || self == .dualBar
+    }
 }
 
 enum MenuBarColorStyle: String, CaseIterable, Identifiable, Sendable {

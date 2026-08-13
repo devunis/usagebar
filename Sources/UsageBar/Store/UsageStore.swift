@@ -69,11 +69,11 @@ final class UsageStore: ObservableObject {
             )
         }
     }
-    @Published var menuBarDisplayStyle: MenuBarDisplayStyle {
+    @Published var menuBarIconStyle: MenuBarIconStyle {
         didSet {
             UserDefaults.standard.set(
-                menuBarDisplayStyle.rawValue,
-                forKey: Defaults.menuBarDisplayStyle
+                menuBarIconStyle.rawValue,
+                forKey: Defaults.menuBarIconStyle
             )
         }
     }
@@ -144,9 +144,9 @@ final class UsageStore: ObservableObject {
                 forKey: Defaults.claudeMenuBarLimit
             )
         }
-        menuBarDisplayStyle = MenuBarDisplayStyle(
-            rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarDisplayStyle) ?? ""
-        ) ?? .barAndPercent
+        menuBarIconStyle = MenuBarIconStyle(
+            rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarIconStyle) ?? ""
+        ) ?? .battery
         menuBarColorStyle = MenuBarColorStyle(
             rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarColorStyle) ?? ""
         ) ?? .provider
@@ -374,7 +374,7 @@ final class UsageStore: ObservableObject {
         static let menuBarProvider = "menuBarProviderSelection"
         static let menuBarLimit = "menuBarLimitSelection"
         static let claudeMenuBarLimit = "claudeMenuBarLimitSelection"
-        static let menuBarDisplayStyle = "menuBarDisplayStyle"
+        static let menuBarIconStyle = "menuBarIconStyle"
         static let menuBarColorStyle = "menuBarColorStyle"
         static let menuBarItemCount = "menuBarItemCount"
     }

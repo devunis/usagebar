@@ -89,11 +89,7 @@ struct SettingsView: View {
                     Text("3개").tag(3)
                 }
 
-                Picker("표시 방식", selection: $store.menuBarDisplayStyle) {
-                    ForEach(MenuBarDisplayStyle.allCases) { style in
-                        Text(style.name).tag(style)
-                    }
-                }
+                MenuBarIconStylePicker(selection: $store.menuBarIconStyle)
 
                 Picker("색상", selection: $store.menuBarColorStyle) {
                     ForEach(MenuBarColorStyle.allCases) { style in
@@ -134,5 +130,126 @@ struct SettingsView: View {
                 .textSelection(.enabled)
                 .padding(.leading, 20)
         }
+    }
+}
+
+private struct MenuBarIconStylePicker: View {
+    @Binding var selection: MenuBarIconStyle
+
+    private let columns = Array(
+        repeating: GridItem(.flexible(), spacing: 8),
+        count: 3
+    )
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("아이콘 스타일")
+                .font(.subheadline.weight(.medium))
+
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(MenuBarIconStyle.allCases) { style in
+                    Button {
+                        selection = style
+                    } label: {
+                        VStack(spacing: 7) {
+                            MenuBarIconStylePreview(style: style)
+                                .frame(height: 31)
+                                .frame(maxWidth: .infinity)
+                                .background(.black.opacity(0.52), in: RoundedRectangle(cornerRadius: 6))
+
+                            HStack(spacing: 4) {
+                                Text(style.name)
+                                if selection == style {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                            .font(.caption.weight(.semibold))
+                        }
+                        .padding(8)
+                        .background(
+                            selection == style
+                                ? Color.accentColor.opacity(0.13)
+                                : Color.secondary.opacity(0.06),
+                            in: RoundedRectangle(cornerRadius: 9)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9)
+                                .stroke(
+                                    selection == style
+                                        ? Color.accentColor
+                                        : Color.secondary.opacity(0.28),
+                                    lineWidth: selection == style ? 2 : 1
+                                )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct MenuBarIconStylePreview: View {
+    let style: MenuBarIconStyle
+
+    private let accent = Color.orange
+
+    var body: some View {
+        HStack(spacing: 7) {
+            switch style {
+            case .battery:
+                Capsule()
+                    .fill(Color.white.opacity(0.16))
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(accent).frame(width: 25)
+                    }
+                    .frame(width: 39, height: 10)
+                Text("65%")
+            case .circular:
+                ZStack {
+                    Circle().stroke(Color.white.opacity(0.18), lineWidth: 4)
+                    Circle()
+                        .trim(from: 0, to: 0.65)
+                        .stroke(accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Text("65").font(.system(size: 8, weight: .bold, design: .rounded))
+                }
+                .frame(width: 25, height: 25)
+            case .minimal:
+                Text("65%")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+            case .segments:
+                HStack(alignment: .center, spacing: 3) {
+                    ForEach(0..<5, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(index < 3 ? accent : Color.white.opacity(0.18))
+                            .frame(width: 5, height: CGFloat(8 + index * 2))
+                    }
+                }
+            case .dualBar:
+                VStack(spacing: 4) {
+                    previewTrack(fraction: 0.65, color: accent)
+                    previewTrack(fraction: 0.35, color: .purple)
+                }
+                Text("65%")
+            case .gauge:
+                Image(systemName: "gauge.with.dots.needle.50percent")
+                    .font(.system(size: 23))
+                    .foregroundStyle(accent)
+            }
+        }
+        .font(.system(size: 13, weight: .bold, design: .rounded))
+        .foregroundStyle(accent)
+    }
+
+    private func previewTrack(fraction: CGFloat, color: Color) -> some View {
+        Capsule()
+            .fill(Color.white.opacity(0.16))
+            .overlay(alignment: .leading) {
+                Capsule().fill(color).frame(width: 35 * fraction)
+            }
+            .frame(width: 35, height: 5)
     }
 }

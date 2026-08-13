@@ -42,11 +42,12 @@ struct MenuBarStatusLabel: View {
         guard !segments.isEmpty else { return nil }
 
         let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-        let graphicWidth: CGFloat = store.menuBarDisplayStyle.showsBar ? 51 : 15
-        let textGap: CGFloat = store.menuBarDisplayStyle.showsPercent ? 4 : 0
+        let style = store.menuBarIconStyle
+        let graphicWidth = graphicWidth(for: style)
+        let textGap: CGFloat = style.showsExternalPercent && graphicWidth > 0 ? 4 : 0
         let segmentGap: CGFloat = 10
         let percentWidths = segments.map { status -> CGFloat in
-            guard store.menuBarDisplayStyle.showsPercent else { return 0 }
+            guard style.showsExternalPercent else { return 0 }
             return ceil((status.percentText as NSString).size(withAttributes: [.font: font]).width)
         }
 
@@ -60,10 +61,10 @@ struct MenuBarStatusLabel: View {
             for (index, status) in segments.enumerated() {
                 if index > 0 { x += segmentGap }
 
-                drawStatusGraphic(for: status, at: NSPoint(x: x, y: 0))
+                drawStatusGraphic(for: status, style: style, at: NSPoint(x: x, y: 0))
                 x += graphicWidth
 
-                guard store.menuBarDisplayStyle.showsPercent else { continue }
+                guard style.showsExternalPercent else { continue }
                 x += textGap
 
                 let attributes: [NSAttributedString.Key: Any] = [
@@ -97,11 +98,13 @@ struct MenuBarStatusLabel: View {
 
     private func drawStatusGraphic(
         for status: MenuBarStatusSegment,
+        style: MenuBarIconStyle,
         at origin: NSPoint
     ) {
         let summary = status.summary
         let kind = summary.provider
-        let showsBar = store.menuBarDisplayStyle.showsBar
+
+        guard style != .minimal else { return }
 
         if let source = brandImage(for: kind) {
             let markRect = NSRect(
@@ -123,39 +126,191 @@ struct MenuBarStatusLabel: View {
             }
         }
 
-        if showsBar {
-            let trackRect = NSRect(
-                x: origin.x + 22,
-                y: origin.y + 5,
-                width: 28,
-                height: 6
-            )
-            let track = NSBezierPath(
-                roundedRect: trackRect,
-                xRadius: trackRect.height / 2,
-                yRadius: trackRect.height / 2
-            )
+        switch style {
+        case .battery:
+            drawBattery(for: status, at: origin)
+        case .circular:
+            drawCircular(for: status, at: origin)
+        case .segments:
+            drawSegments(for: status, at: origin)
+        case .dualBar:
+            drawDualBar(for: status, at: origin)
+        case .gauge:
+            drawGauge(for: status, at: origin)
+        case .minimal:
+            break
+        }
+    }
 
-            statusColor(for: summary).withAlphaComponent(0.22).setFill()
-            track.fill()
+    private func graphicWidth(for style: MenuBarIconStyle) -> CGFloat {
+        switch style {
+        case .battery, .segments, .dualBar: 51
+        case .circular: 42
+        case .gauge: 45
+        case .minimal: 0
+        }
+    }
 
-            statusColor(for: summary).withAlphaComponent(0.65).setStroke()
+    private func drawBattery(for status: MenuBarStatusSegment, at origin: NSPoint) {
+        let trackRect = NSRect(x: origin.x + 22, y: origin.y + 5, width: 28, height: 6)
+        drawTrack(
+            in: trackRect,
+            fraction: status.fillFraction,
+            color: statusColor(for: status.summary)
+        )
+    }
+
+    private func drawCircular(for status: MenuBarStatusSegment, at origin: NSPoint) {
+        let color = statusColor(for: status.summary)
+        let circleRect = NSRect(x: origin.x + 22, y: origin.y + 0.75, width: 14.5, height: 14.5)
+        let center = NSPoint(x: circleRect.midX, y: circleRect.midY)
+        let radius = circleRect.width / 2 - 1.5
+
+        color.withAlphaComponent(0.2).setStroke()
+        let background = NSBezierPath(ovalIn: circleRect.insetBy(dx: 1, dy: 1))
+        background.lineWidth = 2.5
+        background.stroke()
+
+        if status.fillFraction > 0 {
+            color.setStroke()
+            let progress = NSBezierPath()
+            progress.appendArc(
+                withCenter: center,
+                radius: radius,
+                startAngle: 90,
+                endAngle: 90 - 360 * status.fillFraction,
+                clockwise: true
+            )
+            progress.lineWidth = 2.5
+            progress.lineCapStyle = .round
+            progress.stroke()
+        }
+
+        let number = "\(Int(status.summary.usedPercent.rounded()))" as NSString
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 6.5, weight: .bold),
+            .foregroundColor: color
+        ]
+        let textSize = number.size(withAttributes: attributes)
+        number.draw(
+            at: NSPoint(x: center.x - textSize.width / 2, y: center.y - textSize.height / 2),
+            withAttributes: attributes
+        )
+    }
+
+    private func drawSegments(for status: MenuBarStatusSegment, at origin: NSPoint) {
+        let color = statusColor(for: status.summary)
+        let filledCount = Int(ceil(status.fillFraction * 5))
+        let heights: [CGFloat] = [6, 8, 10, 12, 14]
+
+        for index in 0..<5 {
+            let height = heights[index]
+            let rect = NSRect(
+                x: origin.x + 22 + CGFloat(index) * 5.5,
+                y: origin.y + (16 - height) / 2,
+                width: 4,
+                height: height
+            )
+            let segment = NSBezierPath(roundedRect: rect, xRadius: 1.25, yRadius: 1.25)
+            (index < filledCount ? color : color.withAlphaComponent(0.18)).setFill()
+            segment.fill()
+        }
+    }
+
+    private func drawDualBar(for status: MenuBarStatusSegment, at origin: NSPoint) {
+        let color = statusColor(for: status.summary)
+        drawTrack(
+            in: NSRect(x: origin.x + 22, y: origin.y + 9, width: 28, height: 4),
+            fraction: status.fillFraction,
+            color: color,
+            drawsBorder: false
+        )
+        drawTrack(
+            in: NSRect(x: origin.x + 22, y: origin.y + 3, width: 28, height: 4),
+            fraction: 1 - status.fillFraction,
+            color: NSColor.systemPurple,
+            drawsBorder: false
+        )
+    }
+
+    private func drawGauge(for status: MenuBarStatusSegment, at origin: NSPoint) {
+        let color = statusColor(for: status.summary)
+        let center = NSPoint(x: origin.x + 31.5, y: origin.y + 4)
+        let radius: CGFloat = 8
+
+        color.withAlphaComponent(0.2).setStroke()
+        let background = NSBezierPath()
+        background.appendArc(
+            withCenter: center,
+            radius: radius,
+            startAngle: 0,
+            endAngle: 180,
+            clockwise: false
+        )
+        background.lineWidth = 2.5
+        background.lineCapStyle = .round
+        background.stroke()
+
+        if status.fillFraction > 0 {
+            color.setStroke()
+            let progress = NSBezierPath()
+            progress.appendArc(
+                withCenter: center,
+                radius: radius,
+                startAngle: 180,
+                endAngle: 180 - 180 * status.fillFraction,
+                clockwise: true
+            )
+            progress.lineWidth = 2.5
+            progress.lineCapStyle = .round
+            progress.stroke()
+        }
+
+        let angle = Double.pi * (1 - status.fillFraction)
+        let needle = NSBezierPath()
+        needle.move(to: center)
+        needle.line(to: NSPoint(
+            x: center.x + cos(angle) * 6,
+            y: center.y + sin(angle) * 6
+        ))
+        color.setStroke()
+        needle.lineWidth = 1.25
+        needle.stroke()
+        color.setFill()
+        NSBezierPath(ovalIn: NSRect(x: center.x - 1.5, y: center.y - 1.5, width: 3, height: 3)).fill()
+    }
+
+    private func drawTrack(
+        in rect: NSRect,
+        fraction: CGFloat,
+        color: NSColor,
+        drawsBorder: Bool = true
+    ) {
+        let track = NSBezierPath(
+            roundedRect: rect,
+            xRadius: rect.height / 2,
+            yRadius: rect.height / 2
+        )
+        color.withAlphaComponent(0.18).setFill()
+        track.fill()
+
+        if drawsBorder {
+            color.withAlphaComponent(0.55).setStroke()
             track.lineWidth = 0.75
             track.stroke()
-
-            if status.fillFraction > 0 {
-                NSGraphicsContext.saveGraphicsState()
-                track.addClip()
-                statusColor(for: summary).setFill()
-                NSRect(
-                    x: trackRect.minX,
-                    y: trackRect.minY,
-                    width: max(1.5, trackRect.width * status.fillFraction),
-                    height: trackRect.height
-                ).fill()
-                NSGraphicsContext.restoreGraphicsState()
-            }
         }
+
+        guard fraction > 0 else { return }
+        NSGraphicsContext.saveGraphicsState()
+        track.addClip()
+        color.setFill()
+        NSRect(
+            x: rect.minX,
+            y: rect.minY,
+            width: max(1.5, rect.width * min(max(fraction, 0), 1)),
+            height: rect.height
+        ).fill()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func brandImage(for kind: ProviderKind) -> NSImage? {

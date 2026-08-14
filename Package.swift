@@ -12,12 +12,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "UsageBar",
-            linkerSettings: [
-                .linkedFramework("LocalAuthentication"),
-                .linkedFramework("Security"),
-                .linkedFramework("ServiceManagement")
-            ]
+            name: "UsageBar"
         ),
         .testTarget(
             name: "UsageBarTests",

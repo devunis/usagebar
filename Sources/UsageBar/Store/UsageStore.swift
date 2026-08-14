@@ -1,5 +1,5 @@
 import Foundation
-import ServiceManagement
+import Darwin
 
 func preferredMenuBarWindow(
     from windows: [QuotaWindow],
@@ -167,13 +167,13 @@ final class UsageStore: ObservableObject {
         timerTask?.cancel()
     }
 
-    func refreshAll(allowsCredentialPrompt: Bool = false) {
+    func refreshAll() {
         for kind in visibleProviders {
-            refresh(kind, allowsCredentialPrompt: allowsCredentialPrompt)
+            refresh(kind)
         }
     }
 
-    func refresh(_ kind: ProviderKind, allowsCredentialPrompt: Bool = false) {
+    func refresh(_ kind: ProviderKind) {
         guard enabledProviders.contains(kind),
               !refreshingProviders.contains(kind) else {
             return
@@ -191,9 +191,7 @@ final class UsageStore: ObservableObject {
                 case .codex:
                     CodexQuotaProvider()
                 case .anthropic:
-                    ClaudeQuotaProvider(
-                        allowsKeychainInteraction: allowsCredentialPrompt
-                    )
+                    ClaudeQuotaProvider()
                 case .gemini:
                     GeminiQuotaProvider()
                 }
@@ -380,29 +378,92 @@ final class UsageStore: ObservableObject {
     }
 
     private func applyLaunchAtLoginPreference() {
-        let service = SMAppService.mainApp
         do {
             if launchAtLoginEnabled {
-                switch service.status {
-                case .notRegistered:
-                    try service.register()
-                case .requiresApproval:
-                    launchAtLoginMessage = "시스템 설정 → 일반 → 로그인 항목에서 UsageBar를 허용해 주세요."
-                    return
-                case .enabled:
-                    break
-                case .notFound:
+                guard Bundle.main.bundleURL.path.hasPrefix("/Applications/") else {
                     launchAtLoginMessage = "UsageBar를 응용 프로그램 폴더에서 실행해 주세요."
                     return
-                @unknown default:
-                    break
                 }
-            } else if service.status == .enabled || service.status == .requiresApproval {
-                try service.unregister()
+                try installLaunchAgent()
+            } else {
+                try removeLaunchAgent()
             }
             launchAtLoginMessage = nil
         } catch {
             launchAtLoginMessage = "자동 실행 설정을 변경하지 못했습니다: \(error.localizedDescription)"
+        }
+    }
+
+    private var launchAgentLabel: String {
+        "com.usagebar.app.login-item"
+    }
+
+    private var launchAgentURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents")
+            .appendingPathComponent("\(launchAgentLabel).plist")
+    }
+
+    private var launchAgentDomain: String {
+        "gui/\(getuid())"
+    }
+
+    private func installLaunchAgent() throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(
+            at: launchAgentURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let propertyList: [String: Any] = [
+            "Label": launchAgentLabel,
+            "ProgramArguments": [
+                "/usr/bin/open",
+                "-g",
+                Bundle.main.bundleURL.path
+            ],
+            "RunAtLoad": true
+        ]
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: propertyList,
+            format: .xml,
+            options: 0
+        )
+        try data.write(to: launchAgentURL, options: .atomic)
+
+        try? runLaunchctl(["bootout", "\(launchAgentDomain)/\(launchAgentLabel)"])
+        try runLaunchctl(["bootstrap", launchAgentDomain, launchAgentURL.path])
+    }
+
+    private func removeLaunchAgent() throws {
+        try? runLaunchctl(["bootout", "\(launchAgentDomain)/\(launchAgentLabel)"])
+        if FileManager.default.fileExists(atPath: launchAgentURL.path) {
+            try FileManager.default.removeItem(at: launchAgentURL)
+        }
+    }
+
+    private func runLaunchctl(_ arguments: [String]) throws {
+        let process = Process()
+        let errors = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        process.arguments = arguments
+        process.standardError = errors
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let detail = String(
+                data: errors.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            )?.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw NSError(
+                domain: "UsageBar.LaunchAtLogin",
+                code: Int(process.terminationStatus),
+                userInfo: [
+                    NSLocalizedDescriptionKey: detail?.isEmpty == false
+                        ? detail!
+                        : "launchctl 명령을 완료하지 못했습니다."
+                ]
+            )
         }
     }
 

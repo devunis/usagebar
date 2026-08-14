@@ -34,15 +34,7 @@ struct MenuContentView: View {
                     enabledDisplayOptions: store.enabledDisplayOptions,
                     refresh: {
                         store.refresh(kind)
-                    },
-                    requestCredentialAccess: kind == .anthropic
-                        ? {
-                            store.refresh(
-                                .anthropic,
-                                allowsCredentialPrompt: true
-                            )
-                        }
-                        : nil
+                    }
                 )
             }
 

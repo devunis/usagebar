@@ -42,12 +42,14 @@ open UsageBar.app
 
 앱은 15분마다 자동 새로고침하며, 설정에서 수동 또는 5/15/30/60분으로 바꿀 수 있습니다. Gemini는 기본적으로 숨겨져 있습니다. 설정에서 공급자, 단기·주간·모델별 한도, 플랜명, 리셋 시간과 갱신 시간을 모두 개별적으로 켜고 끌 수 있습니다.
 
-새로고침 중에는 기존 사용량을 유지하고 카드의 갱신 표시만 회전하며, 새 응답이 도착하면 값만 교체합니다. 일반 새로고침은 Keychain 인증창을 띄우지 않습니다. Claude 카드나 설정의 명시적인 `권한 허용` 버튼에서만 접근을 요청하며, 읽은 토큰은 실행 중 메모리에서 재사용합니다.
+`/Applications`에 설치한 앱은 사용자 LaunchAgent를 등록해 macOS 로그인 시 자동 실행됩니다. 설정의 `로그인할 때 UsageBar 자동 실행`에서 언제든 켜거나 끌 수 있습니다.
+
+새로고침 중에는 기존 사용량을 유지하고 카드의 갱신 표시만 회전하며, 새 응답이 도착하면 값만 교체합니다. UsageBar는 Claude Keychain이나 자격 증명 파일에 직접 접근하지 않으므로 Claude 권한 버튼이나 UsageBar 명의의 인증창을 띄우지 않습니다.
 
 ## 구현 방식
 
 - Codex: 공식 `codex app-server` JSON-RPC의 `account/rateLimits/read`
-- Claude: Claude CLI가 저장한 OAuth 자격 증명으로 Anthropic usage 응답 조회. 자동 갱신과 서비스 켜기는 Keychain 대화상자를 띄우지 않으며, 사용자가 새로고침을 직접 누른 경우에만 접근 권한을 요청합니다.
+- Claude: 공식 Claude CLI의 비대화형 `/usage` 명령 결과를 파싱합니다. 인증과 토큰 사용은 Claude CLI가 담당하며 UsageBar는 자격 증명을 읽지 않습니다.
 - Gemini: Gemini CLI OAuth 자격 증명으로 Code Assist quota 응답 조회
 
 ## 알려진 제한

@@ -22,17 +22,6 @@ struct SettingsView: View {
                         store.setAllProviders(false)
                     }
                 }
-
-                if store.isEnabled(.anthropic) {
-                    Button {
-                        store.refresh(
-                            .anthropic,
-                            allowsCredentialPrompt: true
-                        )
-                    } label: {
-                        Label("Claude Keychain 권한 요청", systemImage: "key")
-                    }
-                }
             }
 
             Section("표시 항목") {

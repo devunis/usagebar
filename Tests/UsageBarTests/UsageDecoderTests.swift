@@ -2,6 +2,19 @@ import XCTest
 @testable import UsageBar
 
 final class UsageDecoderTests: XCTestCase {
+    func testLiveClaudeQuotaWhenRequested() async throws {
+        guard ProcessInfo.processInfo.environment["USAGEBAR_LIVE_CLAUDE_TEST"] == "1" else {
+            throw XCTSkip(
+                "USAGEBAR_LIVE_CLAUDE_TEST=1일 때만 Claude CLI 로그인 세션을 확인합니다."
+            )
+        }
+
+        let snapshot = try await ClaudeQuotaProvider().fetchQuota()
+        XCTAssertEqual(snapshot.provider, .anthropic)
+        XCTAssertEqual(snapshot.windows.map(\.title), ["5시간", "주간", "Fable 주간"])
+        XCTAssertTrue(snapshot.windows.allSatisfy { (0...100).contains($0.clampedPercent) })
+    }
+
     func testLiveCodexQuotaWhenRequested() async throws {
         guard ProcessInfo.processInfo.environment["USAGEBAR_LIVE_TEST"] == "1" else {
             throw XCTSkip("USAGEBAR_LIVE_TEST=1일 때만 로컬 로그인 세션을 확인합니다.")
@@ -36,45 +49,39 @@ final class UsageDecoderTests: XCTestCase {
         XCTAssertEqual(snapshot.windows[0].usedPercent, 38)
     }
 
-    func testClaudeUsageParsesWeeklyWindow() throws {
-        let data = Data(
+    func testClaudeCLIUsageParsesAllLimitWindows() throws {
+        let snapshot = try ClaudeQuotaProvider.parseCLIUsage(
             """
-            {
-              "five_hour": {"utilization": 22.5, "resets_at": "2026-08-01T01:00:00Z"},
-              "seven_day": {"utilization": 48, "resets_at": "2026-08-05T01:00:00Z"}
-            }
-            """.utf8
+            You are currently using your subscription to power your Claude Code usage
+
+            Current session: 12.5% used · resets August 18, 2026 at 4:00 PM
+            Current week (all models): 34% used · resets August 18, 2026 at 9:00 AM
+            Current week (Fable): 14% used · resets August 18, 2026 at 9:00 AM
+            """
         )
 
-        let snapshot = try ClaudeQuotaProvider.parse(data)
-        XCTAssertEqual(snapshot.windows.map(\.title), ["5시간", "주간"])
-        XCTAssertEqual(snapshot.windows[1].usedPercent, 48)
-        XCTAssertNotNil(snapshot.windows[1].resetsAt)
+        XCTAssertEqual(snapshot.windows.map(\.title), ["5시간", "주간", "Fable 주간"])
+        XCTAssertEqual(snapshot.windows.map(\.kind), [.shortTerm, .weekly, .modelScoped])
+        XCTAssertEqual(snapshot.windows.map(\.usedPercent), [12.5, 34, 14])
+        XCTAssertEqual(snapshot.windows.map(\.durationMinutes), [300, 10_080, 10_080])
+        XCTAssertTrue(snapshot.windows.allSatisfy { $0.resetsAt != nil })
     }
 
-    func testClaudeUsageParsesFableScopedWeeklyWindow() throws {
-        let data = Data(
-            """
-            {
-              "five_hour": {"utilization": 22.5, "resets_at": "2026-08-01T01:00:00Z"},
-              "seven_day": {"utilization": 48, "resets_at": "2026-08-05T01:00:00Z"},
-              "limits": [
-                {
-                  "kind": "weekly_scoped",
-                  "percent": 67.5,
-                  "resets_at": "2026-08-05T01:00:00Z",
-                  "scope": {"model": {"display_name": "Fable"}}
-                }
-              ]
+    func testClaudeCLIUsageWithoutPlanLimitsRequiresLogin() throws {
+        XCTAssertThrowsError(
+            try ClaudeQuotaProvider.parseCLIUsage(
+                """
+                Total cost:            $0.0000
+                Total duration (API):  0s
+                Usage:                 0 input, 0 output
+                """
+            )
+        ) { error in
+            guard case UsageProviderError.missingCredential(let message) = error else {
+                return XCTFail("로그인 안내 오류가 아닙니다: \(error)")
             }
-            """.utf8
-        )
-
-        let snapshot = try ClaudeQuotaProvider.parse(data)
-        let fable = try XCTUnwrap(snapshot.windows.first { $0.title == "Fable 주간" })
-        XCTAssertEqual(fable.usedPercent, 67.5)
-        XCTAssertEqual(fable.durationMinutes, 10_080)
-        XCTAssertNotNil(fable.resetsAt)
+            XCTAssertTrue(message.contains("claude auth login"))
+        }
     }
 
     func testGeminiQuotaUsesMostRestrictiveBucketPerModel() throws {

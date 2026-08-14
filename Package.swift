@@ -15,7 +15,8 @@ let package = Package(
             name: "UsageBar",
             linkerSettings: [
                 .linkedFramework("LocalAuthentication"),
-                .linkedFramework("Security")
+                .linkedFramework("Security"),
+                .linkedFramework("ServiceManagement")
             ]
         ),
         .testTarget(

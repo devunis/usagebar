@@ -108,6 +108,19 @@ struct SettingsView: View {
                 }
             }
 
+            Section("앱 시작") {
+                Toggle("로그인할 때 UsageBar 자동 실행", isOn: Binding(
+                    get: { store.launchAtLoginEnabled },
+                    set: { store.setLaunchAtLogin($0) }
+                ))
+
+                if let message = store.launchAtLoginMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section {
                 Button("지금 모두 새로고침") {
                     store.refreshAll()

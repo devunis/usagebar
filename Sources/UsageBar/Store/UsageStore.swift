@@ -1,4 +1,5 @@
 import Foundation
+import ServiceManagement
 
 func preferredMenuBarWindow(
     from windows: [QuotaWindow],
@@ -45,6 +46,8 @@ final class UsageStore: ObservableObject {
     @Published private(set) var enabledWindowKinds: Set<QuotaWindowKind>
     @Published private(set) var enabledDisplayOptions: Set<DisplayOption>
     @Published private(set) var refreshingProviders: Set<ProviderKind> = []
+    @Published private(set) var launchAtLoginEnabled: Bool
+    @Published private(set) var launchAtLoginMessage: String?
     @Published var menuBarProviderSelection: MenuBarProviderSelection {
         didSet {
             UserDefaults.standard.set(
@@ -96,6 +99,10 @@ final class UsageStore: ObservableObject {
     private var timerTask: Task<Void, Never>?
 
     init() {
+        launchAtLoginEnabled = UserDefaults.standard.object(
+            forKey: Defaults.launchAtLogin
+        ) as? Bool ?? true
+        launchAtLoginMessage = nil
         let savedInterval = UserDefaults.standard.integer(forKey: Defaults.refreshInterval)
         refreshIntervalMinutes = savedInterval == 0 ? 15 : savedInterval
         if let savedProviders = UserDefaults.standard.stringArray(
@@ -153,6 +160,7 @@ final class UsageStore: ObservableObject {
         let savedItemCount = UserDefaults.standard.integer(forKey: Defaults.menuBarItemCount)
         menuBarItemCount = savedItemCount == 0 ? 2 : min(max(savedItemCount, 1), 3)
         restartTimer()
+        applyLaunchAtLoginPreference()
     }
 
     deinit {
@@ -214,6 +222,12 @@ final class UsageStore: ObservableObject {
 
     func isRefreshing(_ kind: ProviderKind) -> Bool {
         refreshingProviders.contains(kind)
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        launchAtLoginEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: Defaults.launchAtLogin)
+        applyLaunchAtLoginPreference()
     }
 
     var visibleProviders: [ProviderKind] {
@@ -365,6 +379,33 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    private func applyLaunchAtLoginPreference() {
+        let service = SMAppService.mainApp
+        do {
+            if launchAtLoginEnabled {
+                switch service.status {
+                case .notRegistered:
+                    try service.register()
+                case .requiresApproval:
+                    launchAtLoginMessage = "시스템 설정 → 일반 → 로그인 항목에서 UsageBar를 허용해 주세요."
+                    return
+                case .enabled:
+                    break
+                case .notFound:
+                    launchAtLoginMessage = "UsageBar를 응용 프로그램 폴더에서 실행해 주세요."
+                    return
+                @unknown default:
+                    break
+                }
+            } else if service.status == .enabled || service.status == .requiresApproval {
+                try service.unregister()
+            }
+            launchAtLoginMessage = nil
+        } catch {
+            launchAtLoginMessage = "자동 실행 설정을 변경하지 못했습니다: \(error.localizedDescription)"
+        }
+    }
+
     private enum Defaults {
         static let refreshInterval = "refreshIntervalMinutes"
         static let enabledProviders = "enabledProviders"
@@ -377,5 +418,6 @@ final class UsageStore: ObservableObject {
         static let menuBarIconStyle = "menuBarIconStyle"
         static let menuBarColorStyle = "menuBarColorStyle"
         static let menuBarItemCount = "menuBarItemCount"
+        static let launchAtLogin = "launchAtLoginEnabled"
     }
 }

@@ -8,6 +8,10 @@
     <string>UsageBar</string>
     <key>CFBundleIdentifier</key>
     <string>com.usagebar.app</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -15,9 +19,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.11.1</string>
+    <string>0.12.0</string>
     <key>CFBundleVersion</key>
-    <string>22</string>
+    <string>23</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>

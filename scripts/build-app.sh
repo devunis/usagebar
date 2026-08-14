@@ -24,6 +24,16 @@ mkdir -p "$RESOURCES_DIR/BrandMarks"
 cp ".build/$BUILD_CONFIG/UsageBar" "$MACOS_DIR/UsageBar"
 cp "$ROOT_DIR/scripts/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp "$ROOT_DIR/Resources/BrandMarks/"*.svg "$RESOURCES_DIR/BrandMarks/"
+
+if [[ -d "$ROOT_DIR/Resources/Assets.xcassets" ]]; then
+  xcrun actool "$ROOT_DIR/Resources/Assets.xcassets" \
+    --compile "$RESOURCES_DIR" \
+    --platform macosx \
+    --minimum-deployment-target 14.0 \
+    --app-icon AppIcon \
+    --output-partial-info-plist "$ROOT_DIR/.build/UsageBar-actool-info.plist"
+fi
+
 codesign --force --deep --sign - "$APP_DIR"
 
 echo "$APP_DIR"

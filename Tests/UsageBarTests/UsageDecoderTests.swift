@@ -2,6 +2,28 @@ import XCTest
 @testable import UsageBar
 
 final class UsageDecoderTests: XCTestCase {
+    func testCLIWorkingDirectoryIsScopedBelowUsageBarSupportFolder() throws {
+        let baseDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: baseDirectory) }
+
+        let directory = try cliWorkingDirectory(
+            for: "claude/code",
+            applicationSupportDirectory: baseDirectory
+        )
+
+        XCTAssertEqual(
+            directory.standardizedFileURL.path,
+            baseDirectory
+                .appendingPathComponent("UsageBar/CLIWorkspaces/claude-code")
+                .standardizedFileURL.path
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: directory.path)
+        )
+        XCTAssertNotEqual(directory.standardizedFileURL.path, "/")
+    }
+
     func testLiveClaudeQuotaWhenRequested() async throws {
         guard ProcessInfo.processInfo.environment["USAGEBAR_LIVE_CLAUDE_TEST"] == "1" else {
             throw XCTSkip(

@@ -25,9 +25,12 @@ struct ClaudeQuotaProvider: QuotaProvider {
             "--safe-mode",
             "-p",
             "--no-session-persistence",
+            "--tools", "",
+            "--permission-mode", "dontAsk",
             "--output-format", "json",
             "/usage"
         ]
+        try configureCLIProcess(process, for: "claude")
         process.standardInput = input
         process.standardOutput = output
         process.standardError = errors

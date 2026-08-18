@@ -22,6 +22,7 @@ struct CodexQuotaProvider: QuotaProvider {
             "/usr/local/bin/codex"
         ])
         process.arguments = ["app-server"]
+        try configureCLIProcess(process, for: "codex")
         process.standardInput = input
         process.standardOutput = output
         process.standardError = errors
@@ -145,6 +146,48 @@ struct CodexQuotaProvider: QuotaProvider {
         data.append(0x0A)
         try handle.write(contentsOf: data)
     }
+}
+
+func configureCLIProcess(_ process: Process, for command: String) throws {
+    let directory = try cliWorkingDirectory(for: command)
+    var environment = process.environment ?? ProcessInfo.processInfo.environment
+    environment["PWD"] = directory.path
+    process.environment = environment
+    process.currentDirectoryURL = directory
+}
+
+func cliWorkingDirectory(
+    for command: String,
+    applicationSupportDirectory: URL? = nil,
+    fileManager: FileManager = .default
+) throws -> URL {
+    let supportDirectory: URL
+    if let applicationSupportDirectory {
+        supportDirectory = applicationSupportDirectory
+    } else {
+        guard let resolved = fileManager.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first else {
+            throw UsageProviderError.commandFailed(
+                "UsageBar 전용 작업 폴더를 찾을 수 없습니다."
+            )
+        }
+        supportDirectory = resolved
+    }
+
+    let safeName = command.unicodeScalars.map { scalar in
+        CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : "-"
+    }
+    let directory = supportDirectory
+        .appendingPathComponent("UsageBar", isDirectory: true)
+        .appendingPathComponent("CLIWorkspaces", isDirectory: true)
+        .appendingPathComponent(String(safeName), isDirectory: true)
+    try fileManager.createDirectory(
+        at: directory,
+        withIntermediateDirectories: true
+    )
+    return directory
 }
 
 func executableURL(named name: String, candidates: [String]) throws -> URL {

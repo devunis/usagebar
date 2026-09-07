@@ -146,7 +146,7 @@ struct CodexQuotaProvider: QuotaProvider {
             limits = [limit]
         }
 
-        var windows: [QuotaWindow] = []
+        var parsedWindows: [(window: QuotaWindow, isNamedLimit: Bool)] = []
         var plan: String?
         for limit in limits {
             plan = plan ?? limit["planType"] as? String
@@ -161,18 +161,31 @@ struct CodexQuotaProvider: QuotaProvider {
                 let title = [limitName, baseTitle]
                     .compactMap { $0 }
                     .joined(separator: " · ")
-                windows.append(QuotaWindow(
-                    id: "\(limitID)-\(key)",
-                    title: title,
-                    kind: (duration ?? 0) >= 10_080 ? .weekly : .shortTerm,
-                    usedPercent: used,
-                    durationMinutes: duration,
-                    resetsAt: resetSeconds.map(Date.init(timeIntervalSince1970:))
+                parsedWindows.append((
+                    window: QuotaWindow(
+                        id: "\(limitID)-\(key)",
+                        title: title,
+                        kind: (duration ?? 0) >= 10_080 ? .weekly : .shortTerm,
+                        usedPercent: used,
+                        durationMinutes: duration,
+                        resetsAt: resetSeconds.map(Date.init(timeIntervalSince1970:))
+                    ),
+                    isNamedLimit: limitName != nil
                 ))
             }
         }
-        guard !windows.isEmpty else { throw UsageProviderError.invalidResponse }
-        windows.sort { ($0.durationMinutes ?? 0) > ($1.durationMinutes ?? 0) }
+        guard !parsedWindows.isEmpty else { throw UsageProviderError.invalidResponse }
+        parsedWindows.sort { lhs, rhs in
+            let lhsRank = windowSortRank(lhs.window, isNamedLimit: lhs.isNamedLimit)
+            let rhsRank = windowSortRank(rhs.window, isNamedLimit: rhs.isNamedLimit)
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+
+            let lhsDuration = lhs.window.durationMinutes ?? Int.max
+            let rhsDuration = rhs.window.durationMinutes ?? Int.max
+            if lhsDuration != rhsDuration { return lhsDuration < rhsDuration }
+            return lhs.window.id < rhs.window.id
+        }
+        let windows = parsedWindows.map(\.window)
         return QuotaSnapshot(
             provider: .codex,
             windows: windows,
@@ -180,6 +193,14 @@ struct CodexQuotaProvider: QuotaProvider {
             fetchedAt: Date(),
             resetCredits: parseResetCredits(result["rateLimitResetCredits"])
         )
+    }
+
+    private static func windowSortRank(
+        _ window: QuotaWindow,
+        isNamedLimit: Bool
+    ) -> Int {
+        if isNamedLimit { return 2 }
+        return window.kind == .shortTerm ? 0 : 1
     }
 
     private static func displayName(for rawName: String?) -> String? {

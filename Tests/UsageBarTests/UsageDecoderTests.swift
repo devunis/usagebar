@@ -69,8 +69,8 @@ final class UsageDecoderTests: XCTestCase {
 
         let snapshot = try CodexQuotaProvider.parse(result)
         XCTAssertEqual(snapshot.plan, "plus")
-        XCTAssertEqual(snapshot.windows.map(\.title), ["주간", "5시간"])
-        XCTAssertEqual(snapshot.windows[0].usedPercent, 38)
+        XCTAssertEqual(snapshot.windows.map(\.title), ["5시간", "주간"])
+        XCTAssertEqual(snapshot.windows[0].usedPercent, 12.5)
     }
 
     func testCodexRateLimitsUseUserFacingReserveLabel() throws {
@@ -78,6 +78,10 @@ final class UsageDecoderTests: XCTestCase {
             "rateLimitsByLimitId": [
                 "codex": [
                     "limitId": "codex",
+                    "primary": [
+                        "usedPercent": 10,
+                        "windowDurationMins": 300
+                    ],
                     "secondary": [
                         "usedPercent": 40,
                         "windowDurationMins": 10_080
@@ -95,7 +99,10 @@ final class UsageDecoderTests: XCTestCase {
         ]
 
         let snapshot = try CodexQuotaProvider.parse(result)
-        XCTAssertEqual(Set(snapshot.windows.map(\.title)), ["주간", "예비 한도 · 주간"])
+        XCTAssertEqual(
+            snapshot.windows.map(\.title),
+            ["5시간", "주간", "예비 한도 · 주간"]
+        )
         XCTAssertFalse(snapshot.windows.contains { $0.title.contains("보조") })
         XCTAssertFalse(snapshot.windows.contains { $0.title.contains("gpt-reserve") })
     }

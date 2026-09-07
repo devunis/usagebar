@@ -45,6 +45,8 @@ final class UsageDecoderTests: XCTestCase {
         let snapshot = try await CodexQuotaProvider().fetchQuota()
         XCTAssertFalse(snapshot.windows.isEmpty)
         XCTAssertTrue(snapshot.windows.allSatisfy { (0...100).contains($0.clampedPercent) })
+        XCTAssertNotNil(snapshot.resetCredits)
+        XCTAssertGreaterThanOrEqual(snapshot.resetCredits?.availableCount ?? -1, 0)
     }
 
     func testCodexRateLimitsParseWeeklyAndFiveHourWindows() throws {
@@ -67,8 +69,85 @@ final class UsageDecoderTests: XCTestCase {
 
         let snapshot = try CodexQuotaProvider.parse(result)
         XCTAssertEqual(snapshot.plan, "plus")
-        XCTAssertEqual(snapshot.windows.map(\.title), ["주간", "5시간 보조"])
+        XCTAssertEqual(snapshot.windows.map(\.title), ["주간", "5시간"])
         XCTAssertEqual(snapshot.windows[0].usedPercent, 38)
+    }
+
+    func testCodexRateLimitsUseUserFacingReserveLabel() throws {
+        let result: [String: Any] = [
+            "rateLimitsByLimitId": [
+                "codex": [
+                    "limitId": "codex",
+                    "secondary": [
+                        "usedPercent": 40,
+                        "windowDurationMins": 10_080
+                    ]
+                ],
+                "gpt-reserve": [
+                    "limitId": "gpt-reserve",
+                    "limitName": "gpt-reserve",
+                    "primary": [
+                        "usedPercent": 1,
+                        "windowDurationMins": 10_080
+                    ]
+                ]
+            ]
+        ]
+
+        let snapshot = try CodexQuotaProvider.parse(result)
+        XCTAssertEqual(Set(snapshot.windows.map(\.title)), ["주간", "예비 한도 · 주간"])
+        XCTAssertFalse(snapshot.windows.contains { $0.title.contains("보조") })
+        XCTAssertFalse(snapshot.windows.contains { $0.title.contains("gpt-reserve") })
+    }
+
+    func testCodexRateLimitsParseResetCreditSummary() throws {
+        let result: [String: Any] = [
+            "rateLimits": [
+                "limitId": "codex",
+                "primary": [
+                    "usedPercent": 42,
+                    "windowDurationMins": 300
+                ]
+            ],
+            "rateLimitResetCredits": [
+                "availableCount": 1,
+                "credits": [[
+                    "id": "reset-1",
+                    "title": "전체 재설정",
+                    "description": "주간 + 5시간",
+                    "grantedAt": 1_800_000_000,
+                    "expiresAt": 1_802_592_000,
+                    "status": "available",
+                    "resetType": "codexRateLimits"
+                ]]
+            ]
+        ]
+
+        let snapshot = try CodexQuotaProvider.parse(result)
+        let summary = try XCTUnwrap(snapshot.resetCredits)
+        XCTAssertEqual(summary.availableCount, 1)
+        XCTAssertEqual(summary.nextAvailableCredit?.id, "reset-1")
+        XCTAssertEqual(summary.nextAvailableCredit?.status, .available)
+        XCTAssertEqual(
+            summary.earliestExpiration,
+            Date(timeIntervalSince1970: 1_802_592_000)
+        )
+    }
+
+    func testCodexResetCreditOutcomeParsing() throws {
+        XCTAssertEqual(
+            try CodexQuotaProvider.parseResetCreditOutcome(["outcome": "reset"]),
+            .reset
+        )
+        XCTAssertEqual(
+            try CodexQuotaProvider.parseResetCreditOutcome([
+                "outcome": "alreadyRedeemed"
+            ]),
+            .alreadyRedeemed
+        )
+        XCTAssertThrowsError(
+            try CodexQuotaProvider.parseResetCreditOutcome(["outcome": "unexpected"])
+        )
     }
 
     func testClaudeCLIUsageParsesAllLimitWindows() throws {

@@ -10,7 +10,7 @@ UsageBar 앱 아이콘은 청록·코랄·보라 사용량 막대를 하나의 �
 
 | 공급자 | 표시 항목 | 인증 |
 | --- | --- | --- |
-| ChatGPT / Codex | 5시간·주간 등 현재 rate-limit 창 | Codex CLI 로그인 |
+| ChatGPT / Codex | 5시간·주간 한도, 재설정 크레딧 횟수·만료일 | Codex CLI 로그인 |
 | Claude | 5시간·주간·Fable 등 모델별 주간 한도 | Claude CLI OAuth 로그인 |
 | Gemini | 모델별 잔여 quota와 리셋 시간 | Gemini CLI OAuth 로그인 |
 
@@ -42,7 +42,9 @@ swift test
 open UsageBar.app
 ```
 
-앱은 15분마다 자동 새로고침하며, 설정에서 수동 또는 5/15/30/60분으로 바꿀 수 있습니다. Gemini는 기본적으로 숨겨져 있습니다. 설정에서 공급자, 단기·주간·모델별 한도, 플랜명, 리셋 시간과 갱신 시간을 모두 개별적으로 켜고 끌 수 있습니다.
+앱은 15분마다 자동 새로고침하며, 설정에서 수동 또는 5/15/30/60분으로 바꿀 수 있습니다. Gemini는 기본적으로 숨겨져 있습니다. 설정에서 공급자, 단기·주간·모델별 한도, 플랜명, 리셋 시간, 재설정 크레딧과 갱신 시간을 모두 개별적으로 켜고 끌 수 있습니다.
+
+ChatGPT/Codex 계정에 적립된 사용 한도 재설정 크레딧이 있으면 횟수와 가장 가까운 만료일을 표시합니다. `재설정 사용`은 확인창을 거친 뒤 5시간 및 주간 한도를 함께 재설정합니다. 네트워크 응답이 불확실한 경우 같은 idempotency key로만 재시도해 크레딧의 중복 소모를 방지합니다.
 
 `/Applications`에 설치한 앱은 사용자 LaunchAgent를 등록해 macOS 로그인 시 자동 실행됩니다. 설정의 `로그인할 때 UsageBar 자동 실행`에서 언제든 켜거나 끌 수 있습니다.
 
@@ -50,7 +52,7 @@ open UsageBar.app
 
 ## 구현 방식
 
-- Codex: 공식 `codex app-server` JSON-RPC의 `account/rateLimits/read`
+- Codex: 공식 `codex app-server` JSON-RPC의 `account/rateLimits/read`와 `account/rateLimitResetCredit/consume`
 - Claude: 공식 Claude CLI의 비대화형 `/usage` 명령 결과를 파싱합니다. 인증과 토큰 사용은 Claude CLI가 담당하며 UsageBar는 자격 증명을 읽지 않습니다.
 - Gemini: Gemini CLI OAuth 자격 증명으로 Code Assist quota 응답 조회
 

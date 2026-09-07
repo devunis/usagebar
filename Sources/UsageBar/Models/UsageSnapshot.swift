@@ -53,6 +53,7 @@ enum DisplayOption: String, CaseIterable, Identifiable, Sendable {
     case menuBarUsage
     case plan
     case resetTime
+    case resetCredit
     case lastUpdated
 
     var id: String { rawValue }
@@ -62,6 +63,7 @@ enum DisplayOption: String, CaseIterable, Identifiable, Sendable {
         case .menuBarUsage: "메뉴바 사용량"
         case .plan: "플랜 이름"
         case .resetTime: "리셋 시간"
+        case .resetCredit: "재설정 크레딧"
         case .lastUpdated: "마지막 갱신 시간"
         }
     }
@@ -183,11 +185,65 @@ struct QuotaWindow: Identifiable, Equatable, Sendable {
     }
 }
 
+enum RateLimitResetCreditStatus: String, Equatable, Sendable {
+    case available
+    case redeeming
+    case redeemed
+    case unknown
+}
+
+struct RateLimitResetCredit: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String?
+    let detail: String?
+    let grantedAt: Date
+    let expiresAt: Date?
+    let status: RateLimitResetCreditStatus
+}
+
+struct RateLimitResetCreditsSummary: Equatable, Sendable {
+    let availableCount: Int
+    let credits: [RateLimitResetCredit]?
+
+    var nextAvailableCredit: RateLimitResetCredit? {
+        credits?.first { $0.status == .available }
+    }
+
+    var earliestExpiration: Date? {
+        credits?
+            .filter { $0.status == .available }
+            .compactMap(\.expiresAt)
+            .min()
+    }
+}
+
+enum ResetCreditOutcome: String, Equatable, Sendable {
+    case reset
+    case nothingToReset
+    case noCredit
+    case alreadyRedeemed
+}
+
 struct QuotaSnapshot: Identifiable, Equatable, Sendable {
     let provider: ProviderKind
     let windows: [QuotaWindow]
     let plan: String?
     let fetchedAt: Date
+    let resetCredits: RateLimitResetCreditsSummary?
+
+    init(
+        provider: ProviderKind,
+        windows: [QuotaWindow],
+        plan: String?,
+        fetchedAt: Date,
+        resetCredits: RateLimitResetCreditsSummary? = nil
+    ) {
+        self.provider = provider
+        self.windows = windows
+        self.plan = plan
+        self.fetchedAt = fetchedAt
+        self.resetCredits = resetCredits
+    }
 
     var id: ProviderKind { provider }
 }

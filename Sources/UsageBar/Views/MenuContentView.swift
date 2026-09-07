@@ -32,8 +32,13 @@ struct MenuContentView: View {
                     isRefreshing: store.isRefreshing(kind),
                     enabledWindowKinds: store.enabledWindowKinds,
                     enabledDisplayOptions: store.enabledDisplayOptions,
+                    isConsumingResetCredit: store.isConsumingCodexResetCredit,
+                    resetMessage: kind == .codex ? store.codexResetMessage : nil,
                     refresh: {
                         store.refresh(kind)
+                    },
+                    consumeResetCredit: { creditID in
+                        store.consumeCodexResetCredit(creditID: creditID)
                     }
                 )
             }

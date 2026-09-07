@@ -46,6 +46,8 @@ final class UsageStore: ObservableObject {
     @Published private(set) var enabledWindowKinds: Set<QuotaWindowKind>
     @Published private(set) var enabledDisplayOptions: Set<DisplayOption>
     @Published private(set) var refreshingProviders: Set<ProviderKind> = []
+    @Published private(set) var isConsumingCodexResetCredit = false
+    @Published private(set) var codexResetMessage: String?
     @Published private(set) var launchAtLoginEnabled: Bool
     @Published private(set) var launchAtLoginMessage: String?
     @Published var menuBarProviderSelection: MenuBarProviderSelection {
@@ -119,9 +121,18 @@ final class UsageStore: ObservableObject {
         }
         if let savedOptions = UserDefaults.standard.stringArray(forKey: Defaults.displayOptions) {
             var options = Set(savedOptions.compactMap(DisplayOption.init(rawValue:)))
+            var addedNewDefault = false
             if !UserDefaults.standard.bool(forKey: Defaults.didAddMenuBarUsage) {
                 options.insert(.menuBarUsage)
                 UserDefaults.standard.set(true, forKey: Defaults.didAddMenuBarUsage)
+                addedNewDefault = true
+            }
+            if !UserDefaults.standard.bool(forKey: Defaults.didAddResetCredit) {
+                options.insert(.resetCredit)
+                UserDefaults.standard.set(true, forKey: Defaults.didAddResetCredit)
+                addedNewDefault = true
+            }
+            if addedNewDefault {
                 UserDefaults.standard.set(
                     DisplayOption.allCases.filter(options.contains).map(\.rawValue),
                     forKey: Defaults.displayOptions
@@ -131,6 +142,7 @@ final class UsageStore: ObservableObject {
         } else {
             enabledDisplayOptions = Set(DisplayOption.allCases)
             UserDefaults.standard.set(true, forKey: Defaults.didAddMenuBarUsage)
+            UserDefaults.standard.set(true, forKey: Defaults.didAddResetCredit)
         }
         menuBarProviderSelection = MenuBarProviderSelection(
             rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarProvider) ?? ""
@@ -220,6 +232,50 @@ final class UsageStore: ObservableObject {
 
     func isRefreshing(_ kind: ProviderKind) -> Bool {
         refreshingProviders.contains(kind)
+    }
+
+    func consumeCodexResetCredit(creditID: String?) {
+        guard !isConsumingCodexResetCredit else { return }
+        isConsumingCodexResetCredit = true
+        codexResetMessage = nil
+
+        let defaults = UserDefaults.standard
+        let pendingKey = defaults.string(forKey: Defaults.pendingResetIdempotencyKey)
+        let key = pendingKey ?? UUID().uuidString
+        let retryCreditID: String?
+        if pendingKey != nil {
+            let savedCreditID = defaults.string(forKey: Defaults.pendingResetCreditID)
+            retryCreditID = savedCreditID?.isEmpty == false ? savedCreditID : nil
+        } else {
+            retryCreditID = creditID
+            defaults.set(creditID ?? "", forKey: Defaults.pendingResetCreditID)
+        }
+        defaults.set(key, forKey: Defaults.pendingResetIdempotencyKey)
+
+        Task {
+            defer { isConsumingCodexResetCredit = false }
+            do {
+                let outcome = try await CodexQuotaProvider().consumeResetCredit(
+                    idempotencyKey: key,
+                    creditID: retryCreditID
+                )
+                defaults.removeObject(forKey: Defaults.pendingResetIdempotencyKey)
+                defaults.removeObject(forKey: Defaults.pendingResetCreditID)
+                switch outcome {
+                case .reset:
+                    codexResetMessage = "5시간 및 주간 사용 한도를 재설정했습니다."
+                case .alreadyRedeemed:
+                    codexResetMessage = "이미 완료된 재설정 요청입니다."
+                case .nothingToReset:
+                    codexResetMessage = "현재 재설정할 사용 한도가 없습니다."
+                case .noCredit:
+                    codexResetMessage = "사용 가능한 재설정 크레딧이 없습니다."
+                }
+                refresh(.codex)
+            } catch {
+                codexResetMessage = "재설정 결과를 확인하지 못했습니다. 다시 누르면 같은 요청으로 안전하게 재시도합니다: \(error.localizedDescription)"
+            }
+        }
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -473,6 +529,7 @@ final class UsageStore: ObservableObject {
         static let windowKinds = "enabledWindowKinds"
         static let displayOptions = "enabledDisplayOptions"
         static let didAddMenuBarUsage = "didAddMenuBarUsageOption"
+        static let didAddResetCredit = "didAddResetCreditOption"
         static let menuBarProvider = "menuBarProviderSelection"
         static let menuBarLimit = "menuBarLimitSelection"
         static let claudeMenuBarLimit = "claudeMenuBarLimitSelection"
@@ -480,5 +537,7 @@ final class UsageStore: ObservableObject {
         static let menuBarColorStyle = "menuBarColorStyle"
         static let menuBarItemCount = "menuBarItemCount"
         static let launchAtLogin = "launchAtLoginEnabled"
+        static let pendingResetIdempotencyKey = "pendingCodexResetIdempotencyKey"
+        static let pendingResetCreditID = "pendingCodexResetCreditID"
     }
 }

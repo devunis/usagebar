@@ -6,7 +6,11 @@ struct ProviderCard: View {
     let isRefreshing: Bool
     let enabledWindowKinds: Set<QuotaWindowKind>
     let enabledDisplayOptions: Set<DisplayOption>
+    let isConsumingResetCredit: Bool
+    let resetMessage: String?
     let refresh: () -> Void
+    let consumeResetCredit: (String?) -> Void
+    @State private var showsResetConfirmation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -34,6 +38,18 @@ struct ProviderCard: View {
         }
         .padding(14)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+        .confirmationDialog(
+            "사용 한도를 재설정할까요?",
+            isPresented: $showsResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("재설정 크레딧 1회 사용", role: .destructive) {
+                consumeResetCredit(currentResetCredits?.nextAvailableCredit?.id)
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("5시간 및 주간 한도가 함께 재설정됩니다. 사용한 크레딧은 되돌릴 수 없습니다.")
+        }
     }
 
     @ViewBuilder
@@ -51,6 +67,11 @@ struct ProviderCard: View {
             }
             ForEach(visibleWindows) { window in
                 quotaRow(window)
+            }
+            if kind == .codex,
+               enabledDisplayOptions.contains(.resetCredit),
+               let resetCredits = snapshot.resetCredits {
+                resetCreditSection(resetCredits)
             }
             if visibleWindows.isEmpty {
                 Text("설정에서 표시할 한도 항목을 선택해 주세요.")
@@ -78,6 +99,66 @@ struct ProviderCard: View {
             Text("새로고침하면 현재 한도를 조회합니다.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var currentResetCredits: RateLimitResetCreditsSummary? {
+        guard case .loaded(let snapshot) = state else { return nil }
+        return snapshot.resetCredits
+    }
+
+    private func resetCreditSection(
+        _ summary: RateLimitResetCreditsSummary
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            HStack {
+                Label("사용 한도 재설정", systemImage: "arrow.counterclockwise.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(summary.availableCount)회 사용 가능")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(summary.availableCount > 0 ? kind.color : .secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        (summary.availableCount > 0 ? kind.color : Color.secondary)
+                            .opacity(0.13),
+                        in: Capsule()
+                    )
+            }
+
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("전체 재설정 (주간 + 5시간)")
+                        .font(.caption.weight(.medium))
+                    if let expiration = summary.earliestExpiration {
+                        Text("\(expiration.formatted(date: .abbreviated, time: .shortened)) 만료")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Button {
+                    showsResetConfirmation = true
+                } label: {
+                    if isConsumingResetCredit {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("재설정 사용")
+                    }
+                }
+                .disabled(summary.availableCount == 0 || isConsumingResetCredit)
+            }
+
+            if let resetMessage, !resetMessage.isEmpty {
+                Text(resetMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

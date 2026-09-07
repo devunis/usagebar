@@ -11,7 +11,46 @@ struct CodexQuotaProvider: QuotaProvider {
         }
     }
 
+    func consumeResetCredit(
+        idempotencyKey: String,
+        creditID: String?
+    ) async throws -> ResetCreditOutcome {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(with: Result {
+                    try consumeResetCreditBlocking(
+                        idempotencyKey: idempotencyKey,
+                        creditID: creditID
+                    )
+                })
+            }
+        }
+    }
+
     private func fetchBlocking() throws -> QuotaSnapshot {
+        try Self.parse(performRequest(method: "account/rateLimits/read"))
+    }
+
+    private func consumeResetCreditBlocking(
+        idempotencyKey: String,
+        creditID: String?
+    ) throws -> ResetCreditOutcome {
+        var params: [String: Any] = ["idempotencyKey": idempotencyKey]
+        if let creditID {
+            params["creditId"] = creditID
+        }
+        return try Self.parseResetCreditOutcome(
+            performRequest(
+                method: "account/rateLimitResetCredit/consume",
+                params: params
+            )
+        )
+    }
+
+    private func performRequest(
+        method: String,
+        params: [String: Any]? = nil
+    ) throws -> [String: Any] {
         let process = Process()
         let input = Pipe()
         let output = Pipe()
@@ -53,7 +92,7 @@ struct CodexQuotaProvider: QuotaProvider {
         ], to: input.fileHandleForWriting)
 
         var buffer = Data()
-        var sentRateRequest = false
+        var sentRequest = false
         while process.isRunning {
             let chunk = output.fileHandleForReading.availableData
             if chunk.isEmpty { break }
@@ -68,12 +107,13 @@ struct CodexQuotaProvider: QuotaProvider {
                     continue
                 }
 
-                if id == 1, !sentRateRequest {
-                    sentRateRequest = true
-                    try write(
-                        ["method": "account/rateLimits/read", "id": 2],
-                        to: input.fileHandleForWriting
-                    )
+                if id == 1, !sentRequest {
+                    sentRequest = true
+                    var request: [String: Any] = ["method": method, "id": 2]
+                    if let params {
+                        request["params"] = params
+                    }
+                    try write(request, to: input.fileHandleForWriting)
                 } else if id == 2 {
                     if let error = object["error"] as? [String: Any] {
                         throw UsageProviderError.commandFailed(
@@ -83,7 +123,7 @@ struct CodexQuotaProvider: QuotaProvider {
                     guard let result = object["result"] as? [String: Any] else {
                         throw UsageProviderError.invalidResponse
                     }
-                    return try Self.parse(result)
+                    return result
                 }
             }
         }
@@ -111,14 +151,14 @@ struct CodexQuotaProvider: QuotaProvider {
         for limit in limits {
             plan = plan ?? limit["planType"] as? String
             let limitID = limit["limitId"] as? String ?? "codex"
-            let limitName = limit["limitName"] as? String
-            for (key, suffix) in [("primary", ""), ("secondary", " 보조")] {
+            let limitName = displayName(for: limit["limitName"] as? String)
+            for key in ["primary", "secondary"] {
                 guard let window = limit[key] as? [String: Any],
                       let used = number(window["usedPercent"]) else { continue }
                 let duration = integer(window["windowDurationMins"])
                 let resetSeconds = number(window["resetsAt"])
                 let baseTitle = duration.map(windowTitle) ?? "한도"
-                let title = [limitName, baseTitle + suffix]
+                let title = [limitName, baseTitle]
                     .compactMap { $0 }
                     .joined(separator: " · ")
                 windows.append(QuotaWindow(
@@ -137,8 +177,66 @@ struct CodexQuotaProvider: QuotaProvider {
             provider: .codex,
             windows: windows,
             plan: plan,
-            fetchedAt: Date()
+            fetchedAt: Date(),
+            resetCredits: parseResetCredits(result["rateLimitResetCredits"])
         )
+    }
+
+    private static func displayName(for rawName: String?) -> String? {
+        guard let rawName = rawName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawName.isEmpty else {
+            return nil
+        }
+
+        switch rawName.lowercased() {
+        case "gpt-reserve":
+            return "예비 한도"
+        default:
+            return rawName
+        }
+    }
+
+    static func parseResetCredits(_ value: Any?) -> RateLimitResetCreditsSummary? {
+        guard let summary = value as? [String: Any],
+              let availableCount = integer(summary["availableCount"]) else {
+            return nil
+        }
+
+        let credits: [RateLimitResetCredit]?
+        if let rows = summary["credits"] as? [[String: Any]] {
+            credits = rows.compactMap { row in
+                guard let id = row["id"] as? String,
+                      let grantedAt = number(row["grantedAt"]),
+                      let statusRaw = row["status"] as? String else {
+                    return nil
+                }
+                return RateLimitResetCredit(
+                    id: id,
+                    title: row["title"] as? String,
+                    detail: row["description"] as? String,
+                    grantedAt: Date(timeIntervalSince1970: grantedAt),
+                    expiresAt: number(row["expiresAt"])
+                        .map(Date.init(timeIntervalSince1970:)),
+                    status: RateLimitResetCreditStatus(rawValue: statusRaw) ?? .unknown
+                )
+            }
+        } else {
+            credits = nil
+        }
+        return RateLimitResetCreditsSummary(
+            availableCount: availableCount,
+            credits: credits
+        )
+    }
+
+    static func parseResetCreditOutcome(
+        _ result: [String: Any]
+    ) throws -> ResetCreditOutcome {
+        guard let rawValue = result["outcome"] as? String,
+              let outcome = ResetCreditOutcome(rawValue: rawValue) else {
+            throw UsageProviderError.invalidResponse
+        }
+        return outcome
     }
 
     private func write(_ object: [String: Any], to handle: FileHandle) throws {
@@ -214,7 +312,7 @@ func number(_ value: Any?) -> Double? {
     return nil
 }
 
-private func integer(_ value: Any?) -> Int? {
+func integer(_ value: Any?) -> Int? {
     number(value).map(Int.init)
 }
 

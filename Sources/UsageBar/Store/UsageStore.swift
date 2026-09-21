@@ -14,6 +14,21 @@ func preferredMenuBarWindow(
         .max { $0.clampedPercent < $1.clampedPercent }
 }
 
+func menuBarLimitSelection(
+    for provider: ProviderKind,
+    standardSelection: MenuBarLimitSelection,
+    claudeSelection: MenuBarLimitSelection
+) -> MenuBarLimitSelection {
+    switch provider {
+    case .codex:
+        return standardSelection
+    case .anthropic:
+        return claudeSelection
+    case .gemini:
+        return .modelScoped
+    }
+}
+
 func displayStateWhileRefreshing(_ previous: ProviderState) -> ProviderState {
     if case .loaded = previous {
         return previous
@@ -147,9 +162,36 @@ final class UsageStore: ObservableObject {
         menuBarProviderSelection = MenuBarProviderSelection(
             rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarProvider) ?? ""
         ) ?? .highest
+
+        if !UserDefaults.standard.bool(forKey: Defaults.didPreferShortTermMenuBarLimits) {
+            let savedCodexLimit = MenuBarLimitSelection(
+                rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarLimit) ?? ""
+            )
+            if savedCodexLimit == nil || savedCodexLimit == .highest {
+                UserDefaults.standard.set(
+                    MenuBarLimitSelection.shortTerm.rawValue,
+                    forKey: Defaults.menuBarLimit
+                )
+            }
+
+            let savedClaudeLimit = MenuBarLimitSelection(
+                rawValue: UserDefaults.standard.string(forKey: Defaults.claudeMenuBarLimit) ?? ""
+            )
+            if savedClaudeLimit == nil || savedClaudeLimit == .weekly {
+                UserDefaults.standard.set(
+                    MenuBarLimitSelection.shortTerm.rawValue,
+                    forKey: Defaults.claudeMenuBarLimit
+                )
+            }
+            UserDefaults.standard.set(
+                true,
+                forKey: Defaults.didPreferShortTermMenuBarLimits
+            )
+        }
+
         menuBarLimitSelection = MenuBarLimitSelection(
             rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarLimit) ?? ""
-        ) ?? .highest
+        ) ?? .shortTerm
         if let savedClaudeLimit = MenuBarLimitSelection(
             rawValue: UserDefaults.standard.string(
                 forKey: Defaults.claudeMenuBarLimit
@@ -157,9 +199,9 @@ final class UsageStore: ObservableObject {
         ) {
             claudeMenuBarLimitSelection = savedClaudeLimit
         } else {
-            claudeMenuBarLimitSelection = .weekly
+            claudeMenuBarLimitSelection = .shortTerm
             UserDefaults.standard.set(
-                MenuBarLimitSelection.weekly.rawValue,
+                MenuBarLimitSelection.shortTerm.rawValue,
                 forKey: Defaults.claudeMenuBarLimit
             )
         }
@@ -300,9 +342,11 @@ final class UsageStore: ObservableObject {
 
         let summaries = providers.compactMap { provider -> MenuBarUsageSummary? in
             guard case .loaded(let snapshot) = states[provider] else { return nil }
-            let selection = provider == .anthropic
-                ? claudeMenuBarLimitSelection
-                : menuBarLimitSelection
+            let selection = menuBarLimitSelection(
+                for: provider,
+                standardSelection: menuBarLimitSelection,
+                claudeSelection: claudeMenuBarLimitSelection
+            )
             guard let window = preferredMenuBarWindow(
                 from: snapshot.windows,
                 enabledKinds: enabledWindowKinds,
@@ -533,6 +577,7 @@ final class UsageStore: ObservableObject {
         static let menuBarProvider = "menuBarProviderSelection"
         static let menuBarLimit = "menuBarLimitSelection"
         static let claudeMenuBarLimit = "claudeMenuBarLimitSelection"
+        static let didPreferShortTermMenuBarLimits = "didPreferShortTermMenuBarLimits"
         static let menuBarIconStyle = "menuBarIconStyle"
         static let menuBarColorStyle = "menuBarColorStyle"
         static let menuBarItemCount = "menuBarItemCount"

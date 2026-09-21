@@ -301,6 +301,33 @@ final class UsageDecoderTests: XCTestCase {
         )
     }
 
+    func testGeminiMenuBarAlwaysUsesModelScopedLimits() {
+        XCTAssertEqual(
+            menuBarLimitSelection(
+                for: .gemini,
+                standardSelection: .shortTerm,
+                claudeSelection: .weekly
+            ),
+            .modelScoped
+        )
+        XCTAssertEqual(
+            menuBarLimitSelection(
+                for: .codex,
+                standardSelection: .shortTerm,
+                claudeSelection: .weekly
+            ),
+            .shortTerm
+        )
+        XCTAssertEqual(
+            menuBarLimitSelection(
+                for: .anthropic,
+                standardSelection: .shortTerm,
+                claudeSelection: .weekly
+            ),
+            .weekly
+        )
+    }
+
     func testRefreshingKeepsPreviousSnapshotVisible() {
         let snapshot = QuotaSnapshot(
             provider: .codex,

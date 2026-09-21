@@ -60,7 +60,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Picker("Codex·Gemini 한도", selection: $store.menuBarLimitSelection) {
+                Picker("Codex 한도", selection: $store.menuBarLimitSelection) {
                     ForEach(MenuBarLimitSelection.allCases) { selection in
                         Text(selection.name).tag(selection)
                     }

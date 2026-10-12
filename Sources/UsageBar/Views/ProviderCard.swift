@@ -1,5 +1,8 @@
 import SwiftUI
 
+// Disambiguate the property wrapper from the SDK's same-named State macro.
+private typealias ConfirmationState = State<Bool>
+
 struct ProviderCard: View {
     let kind: ProviderKind
     let state: ProviderState
@@ -10,7 +13,10 @@ struct ProviderCard: View {
     let resetMessage: String?
     let refresh: () -> Void
     let consumeResetCredit: (String?) -> Void
-    @State private var showsResetConfirmation = false
+    let connectClaudeBenefits: () -> Void
+    let claudeBenefitsMessage: String?
+    @ConfirmationState private var showsResetConfirmation = false
+    @ConfirmationState private var showsClaudeConnectionConfirmation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -50,6 +56,16 @@ struct ProviderCard: View {
         } message: {
             Text("5시간 및 주간 한도가 함께 재설정됩니다. 사용한 크레딧은 되돌릴 수 없습니다.")
         }
+        .confirmationDialog(
+            "Claude 추가 정보를 연결할까요?",
+            isPresented: $showsClaudeConnectionConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("로그인 정보 연결") { connectClaudeBenefits() }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("크레딧과 초기화 정보를 조회하기 위해 기존 Claude 로그인 정보 접근을 요청합니다. macOS 키체인 허용 창이 나타날 수 있습니다. 자동 새로고침에서는 인증창을 띄우지 않습니다.")
+        }
     }
 
     @ViewBuilder
@@ -72,6 +88,12 @@ struct ProviderCard: View {
                enabledDisplayOptions.contains(.resetCredit),
                let resetCredits = snapshot.resetCredits {
                 resetCreditSection(resetCredits)
+            }
+            if kind == .anthropic,
+               enabledDisplayOptions.contains(.resetCredit) || enabledDisplayOptions.contains(.cloudCredits) {
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    claudeBenefitsSection(snapshot.claudeBenefits, now: context.date)
+                }
             }
             if visibleWindows.isEmpty {
                 Text("설정에서 표시할 한도 항목을 선택해 주세요.")
@@ -180,6 +202,81 @@ struct ProviderCard: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func claudeBenefitsSection(
+        _ benefits: ClaudeAccountBenefits?, now: Date
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            if enabledDisplayOptions.contains(.resetCredit) {
+                HStack {
+                    Label("제한 초기화", systemImage: "arrow.counterclockwise.circle")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if let inventory = benefits?.resets {
+                        let count = inventory.availableCount(at: now)
+                        Text(count > 0 ? "\(count)회 사용 가능" : "현재 초기화 없음")
+                            .font(.caption)
+                            .foregroundStyle(count > 0 ? kind.color : .secondary)
+                    } else {
+                        Text("조회 불가").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if let expiry = benefits?.resets?.nextExpiration(at: now) {
+                    Text("\(expiry.formatted(date: .abbreviated, time: .shortened)) 만료")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            if enabledDisplayOptions.contains(.cloudCredits) {
+                HStack {
+                    Label("클라우드 세션 크레딧", systemImage: "cloud")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if let credits = benefits?.cloudCredits {
+                        Text("\(usd(credits.remainingUSD)) 남음")
+                            .font(.caption.monospacedDigit())
+                    } else {
+                        Text("조회 불가").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if let credits = benefits?.cloudCredits {
+                    let expired = credits.isExpired(at: now)
+                    ProgressView(value: credits.usedPercent, total: 100)
+                        .tint(expired || credits.locked ? .gray : kind.color)
+                    HStack {
+                        Text("\(usd(credits.allowanceUSD)) 중 \(usd(credits.allowanceUSD - credits.remainingUSD)) 사용")
+                        Spacer()
+                        if expired { Text("만료됨") }
+                        else if credits.locked { Text("사용 불가") }
+                    }
+                    .font(.caption2).foregroundStyle(.secondary)
+                    if let expiry = credits.expiresAt {
+                        Text("\(expiry.formatted(date: .abbreviated, time: .shortened)) 만료")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let message = benefits?.unavailableMessage {
+                Text(message).font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if benefits?.unavailableMessage != nil {
+                Button("추가 정보 연결…") { showsClaudeConnectionConfirmation = true }
+                    .font(.caption)
+                    .disabled(isRefreshing)
+            }
+            if let message = claudeBenefitsMessage {
+                Text(message).font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Link("Claude에서 확인·초기화 ↗", destination: URL(string: "https://claude.ai/settings/usage")!)
+                .font(.caption)
+        }
+    }
+
+    private func usd(_ amount: Double) -> String {
+        amount.formatted(.currency(code: "USD"))
     }
 
     private func progressColor(_ percent: Double) -> Color {

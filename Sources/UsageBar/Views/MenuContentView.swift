@@ -25,23 +25,31 @@ struct MenuContentView: View {
                 .help("모두 새로고침")
             }
 
-            ForEach(store.visibleProviders) { kind in
-                ProviderCard(
-                    kind: kind,
-                    state: store.states[kind] ?? .idle,
-                    isRefreshing: store.isRefreshing(kind),
-                    enabledWindowKinds: store.enabledWindowKinds,
-                    enabledDisplayOptions: store.enabledDisplayOptions,
-                    isConsumingResetCredit: store.isConsumingCodexResetCredit,
-                    resetMessage: kind == .codex ? store.codexResetMessage : nil,
-                    refresh: {
-                        store.refresh(kind)
-                    },
-                    consumeResetCredit: { creditID in
-                        store.consumeCodexResetCredit(creditID: creditID)
+            ScrollView {
+                VStack(spacing: 14) {
+                    ForEach(store.visibleProviders) { kind in
+                        ProviderCard(
+                            kind: kind,
+                            state: store.states[kind] ?? .idle,
+                            isRefreshing: store.isRefreshing(kind),
+                            enabledWindowKinds: store.enabledWindowKinds,
+                            enabledDisplayOptions: store.enabledDisplayOptions,
+                            isConsumingResetCredit: store.isConsumingCodexResetCredit,
+                            resetMessage: kind == .codex ? store.codexResetMessage : nil,
+                            refresh: {
+                                store.refresh(kind)
+                            },
+                            consumeResetCredit: { creditID in
+                                store.consumeCodexResetCredit(creditID: creditID)
+                            },
+                            connectClaudeBenefits: { store.connectClaudeBenefits() },
+                            claudeBenefitsMessage: store.claudeBenefitsMessage
+                        )
                     }
-                )
+                }
             }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: min(600, (NSScreen.main?.visibleFrame.height ?? 800) - 160))
 
             if store.visibleProviders.isEmpty {
                 Text("설정에서 표시할 서비스를 선택해 주세요.")

@@ -54,6 +54,7 @@ enum DisplayOption: String, CaseIterable, Identifiable, Sendable {
     case plan
     case resetTime
     case resetCredit
+    case cloudCredits
     case lastUpdated
 
     var id: String { rawValue }
@@ -64,6 +65,7 @@ enum DisplayOption: String, CaseIterable, Identifiable, Sendable {
         case .plan: "플랜 이름"
         case .resetTime: "리셋 시간"
         case .resetCredit: "재설정 크레딧"
+        case .cloudCredits: "Claude 클라우드 크레딧"
         case .lastUpdated: "마지막 갱신 시간"
         }
     }
@@ -230,19 +232,22 @@ struct QuotaSnapshot: Identifiable, Equatable, Sendable {
     let plan: String?
     let fetchedAt: Date
     let resetCredits: RateLimitResetCreditsSummary?
+    let claudeBenefits: ClaudeAccountBenefits?
 
     init(
         provider: ProviderKind,
         windows: [QuotaWindow],
         plan: String?,
         fetchedAt: Date,
-        resetCredits: RateLimitResetCreditsSummary? = nil
+        resetCredits: RateLimitResetCreditsSummary? = nil,
+        claudeBenefits: ClaudeAccountBenefits? = nil
     ) {
         self.provider = provider
         self.windows = windows
         self.plan = plan
         self.fetchedAt = fetchedAt
         self.resetCredits = resetCredits
+        self.claudeBenefits = claudeBenefits
     }
 
     var id: ProviderKind { provider }

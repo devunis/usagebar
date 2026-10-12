@@ -14,7 +14,7 @@ func preferredMenuBarWindow(
         .max { $0.clampedPercent < $1.clampedPercent }
 }
 
-func menuBarLimitSelection(
+func resolvedMenuBarLimitSelection(
     for provider: ProviderKind,
     standardSelection: MenuBarLimitSelection,
     claudeSelection: MenuBarLimitSelection
@@ -63,6 +63,7 @@ final class UsageStore: ObservableObject {
     @Published private(set) var refreshingProviders: Set<ProviderKind> = []
     @Published private(set) var isConsumingCodexResetCredit = false
     @Published private(set) var codexResetMessage: String?
+    @Published private(set) var claudeBenefitsMessage: String?
     @Published private(set) var launchAtLoginEnabled: Bool
     @Published private(set) var launchAtLoginMessage: String?
     @Published var menuBarProviderSelection: MenuBarProviderSelection {
@@ -147,6 +148,11 @@ final class UsageStore: ObservableObject {
                 UserDefaults.standard.set(true, forKey: Defaults.didAddResetCredit)
                 addedNewDefault = true
             }
+            if !UserDefaults.standard.bool(forKey: Defaults.didAddClaudeCloudCredits) {
+                options.insert(.cloudCredits)
+                UserDefaults.standard.set(true, forKey: Defaults.didAddClaudeCloudCredits)
+                addedNewDefault = true
+            }
             if addedNewDefault {
                 UserDefaults.standard.set(
                     DisplayOption.allCases.filter(options.contains).map(\.rawValue),
@@ -158,6 +164,7 @@ final class UsageStore: ObservableObject {
             enabledDisplayOptions = Set(DisplayOption.allCases)
             UserDefaults.standard.set(true, forKey: Defaults.didAddMenuBarUsage)
             UserDefaults.standard.set(true, forKey: Defaults.didAddResetCredit)
+            UserDefaults.standard.set(true, forKey: Defaults.didAddClaudeCloudCredits)
         }
         menuBarProviderSelection = MenuBarProviderSelection(
             rawValue: UserDefaults.standard.string(forKey: Defaults.menuBarProvider) ?? ""
@@ -224,6 +231,20 @@ final class UsageStore: ObservableObject {
     func refreshAll() {
         for kind in visibleProviders {
             refresh(kind)
+        }
+    }
+
+    func connectClaudeBenefits() {
+        guard enabledProviders.contains(.anthropic), !refreshingProviders.contains(.anthropic) else { return }
+        refreshingProviders.insert(.anthropic)
+        claudeBenefitsMessage = nil
+        Task {
+            defer { refreshingProviders.remove(.anthropic) }
+            do {
+                states[.anthropic] = .loaded(try await ClaudeOAuthUsageProvider.connectOnUserAction())
+            } catch {
+                claudeBenefitsMessage = "추가 정보를 연결하지 못했습니다. Claude 사용량 화면에서 확인해 주세요."
+            }
         }
     }
 
@@ -342,7 +363,7 @@ final class UsageStore: ObservableObject {
 
         let summaries = providers.compactMap { provider -> MenuBarUsageSummary? in
             guard case .loaded(let snapshot) = states[provider] else { return nil }
-            let selection = menuBarLimitSelection(
+            let selection = resolvedMenuBarLimitSelection(
                 for: provider,
                 standardSelection: menuBarLimitSelection,
                 claudeSelection: claudeMenuBarLimitSelection
@@ -574,6 +595,7 @@ final class UsageStore: ObservableObject {
         static let displayOptions = "enabledDisplayOptions"
         static let didAddMenuBarUsage = "didAddMenuBarUsageOption"
         static let didAddResetCredit = "didAddResetCreditOption"
+        static let didAddClaudeCloudCredits = "didAddClaudeCloudCreditsOption"
         static let menuBarProvider = "menuBarProviderSelection"
         static let menuBarLimit = "menuBarLimitSelection"
         static let claudeMenuBarLimit = "claudeMenuBarLimitSelection"

@@ -303,7 +303,7 @@ final class UsageDecoderTests: XCTestCase {
 
     func testGeminiMenuBarAlwaysUsesModelScopedLimits() {
         XCTAssertEqual(
-            menuBarLimitSelection(
+            resolvedMenuBarLimitSelection(
                 for: .gemini,
                 standardSelection: .shortTerm,
                 claudeSelection: .weekly
@@ -311,7 +311,7 @@ final class UsageDecoderTests: XCTestCase {
             .modelScoped
         )
         XCTAssertEqual(
-            menuBarLimitSelection(
+            resolvedMenuBarLimitSelection(
                 for: .codex,
                 standardSelection: .shortTerm,
                 claudeSelection: .weekly
@@ -319,7 +319,7 @@ final class UsageDecoderTests: XCTestCase {
             .shortTerm
         )
         XCTAssertEqual(
-            menuBarLimitSelection(
+            resolvedMenuBarLimitSelection(
                 for: .anthropic,
                 standardSelection: .shortTerm,
                 claudeSelection: .weekly

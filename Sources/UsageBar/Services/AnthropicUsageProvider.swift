@@ -4,7 +4,13 @@ struct ClaudeQuotaProvider: QuotaProvider {
     let kind = ProviderKind.anthropic
 
     func fetchQuota() async throws -> QuotaSnapshot {
-        try await withCheckedThrowingContinuation { continuation in
+        // Keychain reads never show authentication UI. The CLI remains the fallback
+        // and owns login/token refresh; UsageBar never rotates or stores its tokens.
+        if let token = ClaudeOAuthUsageProvider.accessTokenWithoutPrompt(),
+           let snapshot = try? await ClaudeOAuthUsageProvider.fetchQuota(accessToken: token) {
+            return snapshot
+        }
+        return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(with: Result { try fetchBlocking() })
             }
@@ -114,7 +120,8 @@ struct ClaudeQuotaProvider: QuotaProvider {
             provider: .anthropic,
             windows: windows,
             plan: nil,
-            fetchedAt: now
+            fetchedAt: now,
+            claudeBenefits: .unavailable
         )
     }
 

@@ -11,7 +11,7 @@ UsageBar 앱 아이콘은 청록·코랄·보라 사용량 막대를 하나의 �
 | 공급자 | 표시 항목 | 인증 |
 | --- | --- | --- |
 | ChatGPT / Codex | 5시간·주간 한도, 재설정 크레딧 횟수·만료일 | Codex CLI 로그인 |
-| Claude | 5시간·주간·Fable 등 모델별 주간 한도 | Claude CLI OAuth 로그인 |
+| Claude | 5시간·주간·모델별 한도, 제한 초기화 횟수·만료일, 클라우드 크레딧 잔액·만료일 | Claude CLI OAuth 로그인 |
 | Gemini | 모델별 잔여 quota와 리셋 시간 | Gemini CLI OAuth 로그인 |
 
 API 키를 입력하거나 저장하지 않습니다. UsageBar는 이 Mac의 공식 CLI 로그인 세션을 재사용하며 토큰 값을 화면이나 로그에 출력하지 않습니다.
@@ -48,12 +48,14 @@ ChatGPT/Codex 계정에 적립된 사용 한도 재설정 크레딧이 있으면
 
 `/Applications`에 설치한 앱은 사용자 LaunchAgent를 등록해 macOS 로그인 시 자동 실행됩니다. 설정의 `로그인할 때 UsageBar 자동 실행`에서 언제든 켜거나 끌 수 있습니다.
 
-새로고침 중에는 기존 사용량을 유지하고 카드의 갱신 표시만 회전하며, 새 응답이 도착하면 값만 교체합니다. UsageBar는 Claude Keychain이나 자격 증명 파일에 직접 접근하지 않으므로 Claude 권한 버튼이나 UsageBar 명의의 인증창을 띄우지 않습니다.
+새로고침 중에는 기존 사용량을 유지하고 카드의 갱신 표시만 회전하며, 새 응답이 도착하면 값만 교체합니다. 자동 조회는 Claude 로그인 정보를 인증창 없이 읽을 수 있을 때만 사용합니다. 접근이 거부되면 키체인 창을 띄우지 않고 기존 CLI 조회로 돌아갑니다. `추가 정보 연결…`을 직접 누르고 확인했을 때만 기존 로그인 접근 허용을 요청합니다. 취소해도 일반 사용량은 계속 표시됩니다.
+
+Claude 클라우드 크레딧은 일반 한도와 별도로 잔액·사용 막대·만료일을 표시합니다. `resets_at`은 이 항목에서 만료 시각으로 취급합니다. 제한 초기화는 횟수와 가장 가까운 만료일을 표시하며, 실행은 `Claude에서 확인·초기화`로 Claude 사용량 화면을 열어 진행합니다. 추가 정보가 없는 응답은 0회나 $0으로 표시하지 않고 `조회 불가`로 구분합니다. 설정에서 초기화와 클라우드 크레딧 표시를 각각 끌 수 있습니다.
 
 ## 구현 방식
 
 - Codex: 공식 `codex app-server` JSON-RPC의 `account/rateLimits/read`와 `account/rateLimitResetCredit/consume`
-- Claude: 공식 Claude CLI의 비대화형 `/usage` 명령 결과를 파싱합니다. 인증과 토큰 사용은 Claude CLI가 담당하며 UsageBar는 자격 증명을 읽지 않습니다.
+- Claude: 기존 Claude CLI OAuth 세션으로 사용량 엔드포인트를 읽습니다. 인증창 없는 자격 증명 읽기가 불가능하거나 요청이 실패하면 공식 CLI의 비대화형 `/usage`로 일반 한도를 조회합니다. 토큰 갱신은 Claude CLI가 담당하며 UsageBar는 자격 증명을 수정·저장하지 않습니다. 크레딧/초기화 필드는 비공개 응답 형식이므로 공급자의 변경에 따라 조회 불가로 표시될 수 있습니다.
 - Gemini: Gemini CLI OAuth 자격 증명으로 Code Assist quota 응답 조회
 
 ## 알려진 제한

@@ -1,8 +1,39 @@
 import XCTest
+import SwiftUI
+import AppKit
 @testable import UsageBar
 
 final class ClaudeBenefitsTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    @MainActor
+    func testClaudeCardRendersWhenBenefitsAreNotAuthorized() throws {
+        let snapshot = QuotaSnapshot(
+            provider: .anthropic,
+            windows: [QuotaWindow(id: "five_hour", title: "5시간", kind: .shortTerm,
+                                  usedPercent: 14, durationMinutes: 300, resetsAt: nil)],
+            plan: nil, fetchedAt: now, claudeBenefits: .unavailable
+        )
+        let content = ProviderCard(
+            kind: .anthropic, state: .loaded(snapshot), isRefreshing: false,
+            enabledWindowKinds: Set(QuotaWindowKind.allCases),
+            enabledDisplayOptions: Set(DisplayOption.allCases),
+            isConsumingResetCredit: false, resetMessage: nil, refresh: {},
+            consumeResetCredit: { _ in }, connectClaudeBenefits: {}, claudeBenefitsMessage: nil
+        )
+        .frame(width: 378).padding(16).background(Color.black)
+        .environment(\.colorScheme, .dark)
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.nsImage)
+        XCTAssertGreaterThan(image.size.height, 200)
+        XCTAssertGreaterThan(image.size.width, 400)
+        if let path = ProcessInfo.processInfo.environment["USAGEBAR_CARD_PREVIEW_PATH"],
+           let tiff = image.tiffRepresentation,
+           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            try png.write(to: URL(fileURLWithPath: path))
+        }
+    }
 
     func testCloudCreditsPreserveDollarUnitsAndPreferReportedBalance() throws {
         let credits = try XCTUnwrap(ClaudeOAuthUsageProvider.parseCloudCredits([

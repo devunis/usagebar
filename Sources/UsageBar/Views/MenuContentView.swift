@@ -49,7 +49,9 @@ struct MenuContentView: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: min(600, (NSScreen.main?.visibleFrame.height ?? 800) - 160))
+            // MenuBarExtra measures its content without a proposed height. A
+            // maximum alone can collapse ScrollView and hide all provider cards.
+            .frame(height: min(600, max(240, (NSScreen.main?.visibleFrame.height ?? 800) - 160)))
 
             if store.visibleProviders.isEmpty {
                 Text("설정에서 표시할 서비스를 선택해 주세요.")

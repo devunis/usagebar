@@ -28,6 +28,12 @@ struct ProviderCard: View {
 
                 Spacer()
 
+                if kind == .anthropic, needsClaudeConnection {
+                    Button("추가 정보 연결…") { showsClaudeConnectionConfirmation = true }
+                        .font(.caption)
+                        .disabled(isRefreshing)
+                }
+
                 if isRefreshing {
                     ProgressView()
                         .controlSize(.small)
@@ -127,6 +133,14 @@ struct ProviderCard: View {
     private var currentResetCredits: RateLimitResetCreditsSummary? {
         guard case .loaded(let snapshot) = state else { return nil }
         return snapshot.resetCredits
+    }
+
+    private var needsClaudeConnection: Bool {
+        guard enabledDisplayOptions.contains(.resetCredit) || enabledDisplayOptions.contains(.cloudCredits) else {
+            return false
+        }
+        guard case .loaded(let snapshot) = state else { return false }
+        return snapshot.claudeBenefits?.unavailableMessage != nil
     }
 
     private func resetCreditSection(
@@ -260,11 +274,6 @@ struct ProviderCard: View {
             if let message = benefits?.unavailableMessage {
                 Text(message).font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-            if benefits?.unavailableMessage != nil {
-                Button("추가 정보 연결…") { showsClaudeConnectionConfirmation = true }
-                    .font(.caption)
-                    .disabled(isRefreshing)
             }
             if let message = claudeBenefitsMessage {
                 Text(message).font(.caption2).foregroundStyle(.secondary)

@@ -6,7 +6,7 @@ struct ClaudeQuotaProvider: QuotaProvider {
     func fetchQuota() async throws -> QuotaSnapshot {
         // Keychain reads never show authentication UI. The CLI remains the fallback
         // and owns login/token refresh; UsageBar never rotates or stores its tokens.
-        if let token = ClaudeOAuthUsageProvider.accessTokenWithoutPrompt(),
+        if let token = await ClaudeOAuthUsageProvider.readAccessTokenWithoutPrompt(),
            let snapshot = try? await ClaudeOAuthUsageProvider.fetchQuota(accessToken: token) {
             return snapshot
         }

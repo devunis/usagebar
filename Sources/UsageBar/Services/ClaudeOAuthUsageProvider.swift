@@ -7,6 +7,14 @@ enum ClaudeOAuthUsageProvider {
         accessToken(allowAuthenticationUI: false)
     }
 
+    static func readAccessTokenWithoutPrompt() async -> String? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: accessTokenWithoutPrompt())
+            }
+        }
+    }
+
     static func connectOnUserAction() async throws -> QuotaSnapshot {
         let token: String? = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -39,7 +47,11 @@ enum ClaudeOAuthUsageProvider {
             kSecAttrService as String: "Claude Code-credentials",
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseAuthenticationContext as String: context
+            kSecUseAuthenticationContext as String: context,
+            // LAContext alone does not suppress legacy macOS Keychain ACL dialogs.
+            // Keep the explicit policy for both background reads and user actions.
+            kSecUseAuthenticationUI as String: allowAuthenticationUI
+                ? kSecUseAuthenticationUIAllow : kSecUseAuthenticationUIFail
         ]
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
@@ -84,7 +96,10 @@ enum ClaudeOAuthUsageProvider {
                 throw UsageProviderError.invalidResponse
             }
             if includeResets && [400, 403].contains(response.statusCode) { continue }
-            guard response.statusCode == 200, data.count <= 1_000_000,
+            guard response.statusCode == 200 else {
+                throw UsageProviderError.server(status: response.statusCode, message: "Claude 추가 정보 조회를 완료하지 못했습니다.")
+            }
+            guard data.count <= 1_000_000,
                   let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 throw UsageProviderError.invalidResponse
             }

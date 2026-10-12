@@ -1,9 +1,24 @@
 import AppKit
 import SwiftUI
 
+private typealias MenuHeightState = State<CGFloat>
+
+private struct ProviderContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct MenuContentView: View {
     @EnvironmentObject private var store: UsageStore
     @Environment(\.openSettings) private var openSettings
+    @MenuHeightState private var providerContentHeight: CGFloat = 0
+
+    private var maximumProviderHeight: CGFloat {
+        max(240, (NSScreen.main?.visibleFrame.height ?? 800) - 160)
+    }
 
     var body: some View {
         VStack(spacing: 14) {
@@ -47,11 +62,28 @@ struct MenuContentView: View {
                         )
                     }
                 }
+                .frame(maxWidth: .infinity)
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: ProviderContentHeightKey.self,
+                            value: geometry.size.height
+                        )
+                    }
+                }
             }
             .scrollBounceBehavior(.basedOnSize)
-            // MenuBarExtra measures its content without a proposed height. A
-            // maximum alone can collapse ScrollView and hide all provider cards.
-            .frame(height: min(600, max(240, (NSScreen.main?.visibleFrame.height ?? 800) - 160)))
+            // Keep an explicit viewport height so MenuBarExtra cannot collapse it,
+            // while fitting short content and using the screen for longer content.
+            .frame(height: store.visibleProviders.isEmpty ? 0 : min(
+                providerContentHeight > 0 ? providerContentHeight : maximumProviderHeight,
+                maximumProviderHeight
+            ))
+            .onPreferenceChange(ProviderContentHeightKey.self) { height in
+                if height.isFinite && abs(providerContentHeight - height) > 0.5 {
+                    providerContentHeight = height
+                }
+            }
 
             if store.visibleProviders.isEmpty {
                 Text("설정에서 표시할 서비스를 선택해 주세요.")

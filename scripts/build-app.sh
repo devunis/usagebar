@@ -34,6 +34,6 @@ if [[ -d "$ROOT_DIR/Resources/Assets.xcassets" ]]; then
     --output-partial-info-plist "$ROOT_DIR/.build/UsageBar-actool-info.plist"
 fi
 
-codesign --force --deep --sign - "$APP_DIR"
+zsh "$ROOT_DIR/scripts/sign-app.sh" "$APP_DIR"
 
 echo "$APP_DIR"

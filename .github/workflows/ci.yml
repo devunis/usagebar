@@ -13,4 +13,8 @@ jobs:
       - name: Test
         run: swift test
       - name: Build app bundle
+        # CI validates packaging only; never install this ephemeral signer locally.
+        env:
+          USAGEBAR_CODESIGN_IDENTITY: "-"
+          USAGEBAR_ALLOW_ADHOC_SIGNING: "1"
         run: ./scripts/build-app.sh release

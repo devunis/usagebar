@@ -22,7 +22,7 @@ enum ClaudeOAuthUsageProvider {
             }
         }
         guard let token else {
-            throw UsageProviderError.missingCredential("추가 정보 연결이 허용되지 않았습니다. 일반 사용량은 계속 표시됩니다.")
+            throw UsageProviderError.credentialAccessRequired("Claude 로그인 정보에 접근할 수 없습니다. ‘다시 연결’을 눌러 주세요.")
         }
         return try await fetchQuota(accessToken: token)
     }
@@ -48,14 +48,18 @@ enum ClaudeOAuthUsageProvider {
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
             kSecUseAuthenticationContext as String: context,
-            // LAContext alone does not suppress legacy macOS Keychain ACL dialogs.
-            // Keep the explicit policy for both background reads and user actions.
+            // Also set the process-wide legacy policy in ClaudeKeychainAccess below.
             kSecUseAuthenticationUI as String: allowAuthenticationUI
                 ? kSecUseAuthenticationUIAllow : kSecUseAuthenticationUIFail
         ]
-        var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
+        guard let data: Data = ClaudeKeychainAccess.withInteractionPolicy(
+            allowAuthenticationUI: allowAuthenticationUI,
+            operation: {
+                var result: CFTypeRef?
+                guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
+                return result as? Data
+            }
+        ) else { return nil }
         return accessToken(in: data)
     }
 
@@ -96,6 +100,9 @@ enum ClaudeOAuthUsageProvider {
                 throw UsageProviderError.invalidResponse
             }
             if includeResets && [400, 403].contains(response.statusCode) { continue }
+            if [401, 403].contains(response.statusCode) {
+                throw UsageProviderError.credentialAccessRequired("Claude 로그인을 확인한 뒤 ‘다시 연결’을 눌러 주세요.")
+            }
             guard response.statusCode == 200 else {
                 throw UsageProviderError.server(status: response.statusCode, message: "Claude 추가 정보 조회를 완료하지 못했습니다.")
             }

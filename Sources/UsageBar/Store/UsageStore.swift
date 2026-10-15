@@ -46,6 +46,28 @@ func displayStateAfterFailedRefresh(
     return failure
 }
 
+struct ClaudeRefreshFailure {
+    let connectionRequired: Bool
+    let message: String
+
+    init(error: Error, previous: ProviderState) {
+        if let error = error as? UsageProviderError, case .credentialAccessRequired = error {
+            connectionRequired = true
+        } else {
+            connectionRequired = false
+        }
+        let stale: String
+        if case .loaded = previous {
+            stale = "이전 값은 최신이 아닐 수 있습니다. "
+        } else {
+            stale = ""
+        }
+        message = connectionRequired
+            ? "연결 필요 · \(stale)자동 조회는 팝업 없이 재시도합니다."
+            : "갱신 지연 · \(stale)다음 갱신 때 재시도합니다."
+    }
+}
+
 @MainActor
 final class UsageStore: ObservableObject {
     @Published private(set) var states: [ProviderKind: ProviderState] = Dictionary(
@@ -64,6 +86,8 @@ final class UsageStore: ObservableObject {
     @Published private(set) var isConsumingCodexResetCredit = false
     @Published private(set) var codexResetMessage: String?
     @Published private(set) var claudeBenefitsMessage: String?
+    @Published private(set) var claudeRefreshMessage: String?
+    @Published private(set) var claudeConnectionRequired = false
     @Published private(set) var launchAtLoginEnabled: Bool
     @Published private(set) var launchAtLoginMessage: String?
     @Published var menuBarProviderSelection: MenuBarProviderSelection {
@@ -242,8 +266,18 @@ final class UsageStore: ObservableObject {
             defer { refreshingProviders.remove(.anthropic) }
             do {
                 states[.anthropic] = .loaded(try await ClaudeOAuthUsageProvider.connectOnUserAction())
+                claudeConnectionRequired = false
+                claudeRefreshMessage = nil
             } catch {
-                claudeBenefitsMessage = "추가 정보를 연결하지 못했습니다. Claude 사용량 화면에서 확인해 주세요."
+                let notice = ClaudeRefreshFailure(error: error, previous: states[.anthropic] ?? .idle)
+                claudeConnectionRequired = notice.connectionRequired
+                claudeRefreshMessage = notice.message
+                if notice.connectionRequired {
+                    states[.anthropic] = displayStateAfterFailedRefresh(
+                        previous: states[.anthropic] ?? .idle,
+                        failure: .needsConfiguration("Claude에 로그인한 뒤 ‘다시 연결’을 눌러 주세요.")
+                    )
+                }
             }
         }
     }
@@ -272,10 +306,20 @@ final class UsageStore: ObservableObject {
                 }
                 let snapshot = try await provider.fetchQuota()
                 states[kind] = .loaded(snapshot)
+                if kind == .anthropic {
+                    claudeConnectionRequired = false
+                    claudeRefreshMessage = nil
+                    claudeBenefitsMessage = nil
+                }
             } catch let error as UsageProviderError {
+                if kind == .anthropic {
+                    let notice = ClaudeRefreshFailure(error: error, previous: previousState)
+                    claudeConnectionRequired = notice.connectionRequired
+                    claudeRefreshMessage = notice.message
+                }
                 let failure: ProviderState
                 switch error {
-                case .missingCredential(let message):
+                case .missingCredential(let message), .credentialAccessRequired(let message):
                     failure = .needsConfiguration(message)
                 default:
                     failure = .failed(error.localizedDescription)
@@ -285,6 +329,11 @@ final class UsageStore: ObservableObject {
                     failure: failure
                 )
             } catch {
+                if kind == .anthropic {
+                    let notice = ClaudeRefreshFailure(error: error, previous: previousState)
+                    claudeConnectionRequired = notice.connectionRequired
+                    claudeRefreshMessage = notice.message
+                }
                 states[kind] = displayStateAfterFailedRefresh(
                     previous: previousState,
                     failure: .failed(error.localizedDescription)

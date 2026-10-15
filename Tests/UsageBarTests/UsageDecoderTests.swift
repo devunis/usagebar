@@ -27,7 +27,7 @@ final class UsageDecoderTests: XCTestCase {
     func testLiveClaudeQuotaWhenRequested() async throws {
         guard ProcessInfo.processInfo.environment["USAGEBAR_LIVE_CLAUDE_TEST"] == "1" else {
             throw XCTSkip(
-                "USAGEBAR_LIVE_CLAUDE_TEST=1일 때만 Claude CLI 로그인 세션을 확인합니다."
+                "USAGEBAR_LIVE_CLAUDE_TEST=1일 때만 기존 Claude 로그인으로 직접 조회합니다."
             )
         }
 

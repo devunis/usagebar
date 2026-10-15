@@ -58,7 +58,9 @@ struct MenuContentView: View {
                                 store.consumeCodexResetCredit(creditID: creditID)
                             },
                             connectClaudeBenefits: { store.connectClaudeBenefits() },
-                            claudeBenefitsMessage: store.claudeBenefitsMessage
+                            claudeBenefitsMessage: store.claudeBenefitsMessage,
+                            claudeRefreshMessage: store.claudeRefreshMessage,
+                            claudeConnectionRequired: store.claudeConnectionRequired
                         )
                     }
                 }

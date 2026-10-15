@@ -2,73 +2,20 @@ import Foundation
 
 struct ClaudeQuotaProvider: QuotaProvider {
     let kind = ProviderKind.anthropic
-
-    func fetchQuota() async throws -> QuotaSnapshot {
-        // Keychain reads never show authentication UI. The CLI remains the fallback
-        // and owns login/token refresh; UsageBar never rotates or stores its tokens.
-        if let token = await ClaudeOAuthUsageProvider.readAccessTokenWithoutPrompt(),
-           let snapshot = try? await ClaudeOAuthUsageProvider.fetchQuota(accessToken: token) {
-            return snapshot
-        }
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(with: Result { try fetchBlocking() })
-            }
-        }
+    var readToken: @Sendable () async -> String? = {
+        await ClaudeOAuthUsageProvider.readAccessTokenWithoutPrompt()
+    }
+    var loadQuota: @Sendable (String) async throws -> QuotaSnapshot = {
+        try await ClaudeOAuthUsageProvider.fetchQuota(accessToken: $0)
     }
 
-    private func fetchBlocking() throws -> QuotaSnapshot {
-        let process = Process()
-        let input = Pipe()
-        let output = Pipe()
-        let errors = Pipe()
-        process.executableURL = try executableURL(named: "claude", candidates: [
-            "~/.local/bin/claude",
-            "/opt/homebrew/bin/claude",
-            "/usr/local/bin/claude"
-        ])
-        process.arguments = [
-            "--safe-mode",
-            "-p",
-            "--no-session-persistence",
-            "--tools", "",
-            "--permission-mode", "dontAsk",
-            "--output-format", "json",
-            "/usage"
-        ]
-        try configureCLIProcess(process, for: "claude")
-        process.standardInput = input
-        process.standardOutput = output
-        process.standardError = errors
-
-        let finished = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in finished.signal() }
-        do {
-            try process.run()
-            try input.fileHandleForWriting.close()
-        } catch {
-            throw UsageProviderError.commandFailed("Claude CLI를 실행할 수 없습니다.")
+    func fetchQuota() async throws -> QuotaSnapshot {
+        // Retry on each refresh, but never launch a CLI that could display its own
+        // Keychain dialog. Only the explicit Connect action may allow interaction.
+        guard let token = await readToken() else {
+            throw UsageProviderError.credentialAccessRequired("연결 필요 · ‘다시 연결’을 눌러 Claude 로그인 정보 접근을 허용해 주세요.")
         }
-
-        if finished.wait(timeout: .now() + 15) == .timedOut {
-            process.terminate()
-            throw UsageProviderError.commandFailed("Claude 사용량 조회 시간이 초과되었습니다.")
-        }
-
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        let errorText = String(
-            data: errors.fileHandleForReading.readDataToEndOfFile(),
-            encoding: .utf8
-        )?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard process.terminationStatus == 0 else {
-            throw UsageProviderError.missingCredential(
-                errorText?.isEmpty == false
-                    ? errorText!
-                    : "Claude CLI에 로그인해 주세요: claude auth login"
-            )
-        }
-        return try Self.parseCLIResult(data)
+        return try await loadQuota(token)
     }
 
     static func parseCLIResult(_ data: Data) throws -> QuotaSnapshot {

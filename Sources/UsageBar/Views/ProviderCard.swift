@@ -15,6 +15,8 @@ struct ProviderCard: View {
     let consumeResetCredit: (String?) -> Void
     let connectClaudeBenefits: () -> Void
     let claudeBenefitsMessage: String?
+    var claudeRefreshMessage: String? = nil
+    var claudeConnectionRequired: Bool = false
     @ConfirmationState private var showsResetConfirmation = false
     @ConfirmationState private var showsClaudeConnectionConfirmation = false
 
@@ -29,7 +31,7 @@ struct ProviderCard: View {
                 Spacer()
 
                 if kind == .anthropic, needsClaudeConnection {
-                    Button("추가 정보 연결…") { showsClaudeConnectionConfirmation = true }
+                    Button("다시 연결…") { showsClaudeConnectionConfirmation = true }
                         .font(.caption)
                         .disabled(isRefreshing)
                 }
@@ -47,6 +49,17 @@ struct ProviderCard: View {
             }
 
             content
+            if kind == .anthropic, let claudeRefreshMessage {
+                Text(claudeRefreshMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                if case .loaded(let snapshot) = state {
+                    Text("마지막 성공: \(snapshot.fetchedAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .padding(14)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
@@ -63,14 +76,14 @@ struct ProviderCard: View {
             Text("5시간 및 주간 한도가 함께 재설정됩니다. 사용한 크레딧은 되돌릴 수 없습니다.")
         }
         .confirmationDialog(
-            "Claude 추가 정보를 연결할까요?",
+            "Claude 로그인 정보를 연결할까요?",
             isPresented: $showsClaudeConnectionConfirmation,
             titleVisibility: .visible
         ) {
             Button("로그인 정보 연결") { connectClaudeBenefits() }
             Button("취소", role: .cancel) {}
         } message: {
-            Text("크레딧과 초기화 정보를 조회하기 위해 기존 Claude 로그인 정보 접근을 요청합니다. macOS 키체인 허용 창이 나타날 수 있습니다. 자동 새로고침에서는 인증창을 띄우지 않습니다.")
+            Text("사용량·크레딧·초기화 정보를 조회하기 위해 기존 Claude 로그인 정보 접근을 요청합니다. 지금은 macOS 키체인 허용 창이 나타날 수 있습니다. 자동 새로고침에서는 허용 창 없이 재시도합니다.")
         }
     }
 
@@ -136,6 +149,8 @@ struct ProviderCard: View {
     }
 
     private var needsClaudeConnection: Bool {
+        if claudeConnectionRequired { return true }
+        if case .needsConfiguration = state { return true }
         guard enabledDisplayOptions.contains(.resetCredit) || enabledDisplayOptions.contains(.cloudCredits) else {
             return false
         }

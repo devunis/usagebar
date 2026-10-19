@@ -2,44 +2,70 @@ import Foundation
 import Security
 import LocalAuthentication
 
-enum ClaudeOAuthUsageProvider {
-    static func accessTokenWithoutPrompt() -> String? {
-        accessToken(allowAuthenticationUI: false)
+enum ClaudeCredentialRead {
+    case available(String)
+    case expired
+    case unavailable
+    case keychainUnavailable(OSStatus)
+
+    var token: String? {
+        if case .available(let token) = self { return token }
+        return nil
     }
 
-    static func readAccessTokenWithoutPrompt() async -> String? {
+    func tokenForUsage() throws -> String? {
+        if case .expired = self {
+            throw UsageProviderError.credentialExpired("Claude 로그인 토큰이 만료되었습니다. Claude Code에서 로그인을 갱신해 주세요. 키체인 허용을 다시 누르는 것으로는 갱신되지 않습니다.")
+        }
+        if case .keychainUnavailable = self {
+            throw UsageProviderError.credentialAccessRequired("Claude 키체인 정보를 읽을 수 없습니다. ‘다시 연결’을 눌러 접근 상태를 확인해 주세요.")
+        }
+        return token
+    }
+}
+
+enum ClaudeOAuthUsageProvider {
+    static func accessTokenWithoutPrompt() -> String? {
+        credential(allowAuthenticationUI: false).token
+    }
+
+    static func readAccessTokenWithoutPrompt() async throws -> String? {
+        try await readCredentialWithoutPrompt().tokenForUsage()
+    }
+
+    static func readCredentialWithoutPrompt() async -> ClaudeCredentialRead {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: accessTokenWithoutPrompt())
+                continuation.resume(returning: credential(allowAuthenticationUI: false))
             }
         }
     }
 
     static func connectOnUserAction() async throws -> QuotaSnapshot {
-        let token: String? = await withCheckedContinuation { continuation in
+        let result: ClaudeCredentialRead = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: accessToken(allowAuthenticationUI: true))
+                continuation.resume(returning: credential(allowAuthenticationUI: true))
             }
         }
-        guard let token else {
+        guard let token = try result.tokenForUsage() else {
             throw UsageProviderError.credentialAccessRequired("Claude 로그인 정보에 접근할 수 없습니다. ‘다시 연결’을 눌러 주세요.")
         }
         return try await fetchQuota(accessToken: token)
     }
 
-    private static func accessToken(allowAuthenticationUI: Bool) -> String? {
+    private static func credential(allowAuthenticationUI: Bool) -> ClaudeCredentialRead {
         let customDirectory = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
             .flatMap { $0.isEmpty ? nil : $0 }
         let directory = customDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
         let credentialsFile = directory.appendingPathComponent(".credentials.json")
-        if let data = try? Data(contentsOf: credentialsFile),
-           let token = accessToken(in: data) {
-            return token
+        let fileCredential = (try? Data(contentsOf: credentialsFile)).map { parseCredential(in: $0) } ?? .unavailable
+        if case .available = fileCredential {
+            return fileCredential
         }
 
         // Do not substitute another account's default Keychain item for a custom profile.
-        guard customDirectory == nil else { return nil }
+        guard customDirectory == nil else { return fileCredential }
         let context = LAContext()
         context.interactionNotAllowed = !allowAuthenticationUI
         let query: [String: Any] = [
@@ -52,28 +78,29 @@ enum ClaudeOAuthUsageProvider {
             kSecUseAuthenticationUI as String: allowAuthenticationUI
                 ? kSecUseAuthenticationUIAllow : kSecUseAuthenticationUIFail
         ]
-        guard let data: Data = ClaudeKeychainAccess.withInteractionPolicy(
+        guard let read: (OSStatus, Data?) = ClaudeKeychainAccess.withInteractionPolicy(
             allowAuthenticationUI: allowAuthenticationUI,
             operation: {
                 var result: CFTypeRef?
-                guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
-                return result as? Data
+                let status = SecItemCopyMatching(query as CFDictionary, &result)
+                return (status, result as? Data)
             }
-        ) else { return nil }
-        return accessToken(in: data)
+        ) else { return .unavailable }
+        guard read.0 == errSecSuccess, let data = read.1 else { return .keychainUnavailable(read.0) }
+        return parseCredential(in: data)
     }
 
-    private static func accessToken(in data: Data) -> String? {
+    static func parseCredential(in data: Data, now: Date = Date()) -> ClaudeCredentialRead {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let oauth = root["claudeAiOauth"] as? [String: Any],
               let token = oauth["accessToken"] as? String, !token.isEmpty else {
-            return nil
+            return .unavailable
         }
         if let expiresAt = number(oauth["expiresAt"]),
-           expiresAt / 1000 <= Date().timeIntervalSince1970 {
-            return nil
+           expiresAt / 1000 <= now.timeIntervalSince1970 {
+            return .expired
         }
-        return token
+        return .available(token)
     }
 
     static func fetchQuota(accessToken: String) async throws -> QuotaSnapshot {
@@ -100,8 +127,11 @@ enum ClaudeOAuthUsageProvider {
                 throw UsageProviderError.invalidResponse
             }
             if includeResets && [400, 403].contains(response.statusCode) { continue }
-            if [401, 403].contains(response.statusCode) {
-                throw UsageProviderError.credentialAccessRequired("Claude 로그인을 확인한 뒤 ‘다시 연결’을 눌러 주세요.")
+            if response.statusCode == 401 {
+                throw UsageProviderError.credentialExpired("Claude 로그인이 만료되었거나 취소되었습니다. Claude Code에서 로그인을 갱신해 주세요.")
+            }
+            if response.statusCode == 403 {
+                throw UsageProviderError.unauthorized("Claude 사용량 조회 권한이 없습니다. Claude Code 로그인 상태를 확인해 주세요.")
             }
             guard response.statusCode == 200 else {
                 throw UsageProviderError.server(status: response.statusCode, message: "Claude 추가 정보 조회를 완료하지 못했습니다.")
@@ -130,22 +160,50 @@ enum ClaudeOAuthUsageProvider {
 
     static func parse(_ root: [String: Any], now: Date = Date()) throws -> QuotaSnapshot {
         var windows: [QuotaWindow] = []
+        let limits = (root["limits"] as? [Any] ?? []).prefix(200).compactMap { $0 as? [String: Any] }
         let definitions: [(String, String, QuotaWindowKind, Int)] = [
             ("five_hour", "5시간", .shortTerm, 300),
             ("seven_day", "주간", .weekly, 10_080)
         ]
         for (key, title, kind, duration) in definitions {
-            if let window = parseWindow(root[key], id: key, title: title, kind: kind, duration: duration) {
+            let flatKind = kind == .shortTerm ? "session" : "weekly_all"
+            let flat = limits.first { $0["kind"] as? String == flatKind && validPercent($0["percent"]) != nil }
+            let fallback: [String: Any] = [
+                "utilization": flat?["percent"] ?? NSNull(),
+                "resets_at": flat?["resets_at"] ?? NSNull()
+            ]
+            if let window = parseWindow(root[key], id: key, title: title, kind: kind, duration: duration)
+                ?? parseWindow(fallback, id: key, title: title, kind: kind, duration: duration) {
                 windows.append(window)
             }
+        }
+        var scoped: [String: QuotaWindow] = [:]
+        // Model quotas (including Fable) now live in limits[]. They use percent,
+        // not utilization. is_active ranks the binding limit; false is NOT hidden.
+        for limit in limits where limit["kind"] as? String == "weekly_scoped" {
+            guard let scope = limit["scope"] as? [String: Any],
+                  let model = scope["model"] as? [String: Any],
+                  let rawName = model["display_name"] as? String,
+                  let percent = validPercent(limit["percent"]) else { continue }
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = name.lowercased()
+            guard !name.isEmpty, name.count <= 120,
+                  !["all", "all models", "all_models"].contains(normalized),
+                  scoped[normalized] == nil else { continue }
+            scoped[normalized] = QuotaWindow(
+                id: "weekly-scoped-\(normalized)", title: "\(name) 주간", kind: .modelScoped,
+                usedPercent: percent, durationMinutes: 10_080, resetsAt: date(limit["resets_at"])
+            )
         }
         for key in root.keys.sorted() where key.hasPrefix("seven_day_") {
             let scope = key.replacingOccurrences(of: "seven_day_", with: "")
             let title = scope.replacingOccurrences(of: "_", with: " ").capitalized + " 주간"
-            if let window = parseWindow(root[key], id: key, title: title, kind: .modelScoped, duration: 10_080) {
-                windows.append(window)
+            if scoped[scope.replacingOccurrences(of: "_", with: " ").lowercased()] == nil,
+               let window = parseWindow(root[key], id: key, title: title, kind: .modelScoped, duration: 10_080) {
+                scoped[scope.replacingOccurrences(of: "_", with: " ").lowercased()] = window
             }
         }
+        windows.append(contentsOf: scoped.keys.sorted().compactMap { scoped[$0] })
         guard !windows.isEmpty else { throw UsageProviderError.invalidResponse }
         return QuotaSnapshot(
             provider: .anthropic,
@@ -164,11 +222,16 @@ enum ClaudeOAuthUsageProvider {
         _ value: Any?, id: String, title: String, kind: QuotaWindowKind, duration: Int
     ) -> QuotaWindow? {
         guard let window = value as? [String: Any],
-              let used = finiteNumber(window["utilization"]), (0...100).contains(used) else { return nil }
+              let used = validPercent(window["utilization"]) else { return nil }
         return QuotaWindow(
             id: id, title: title, kind: kind, usedPercent: used,
             durationMinutes: duration, resetsAt: date(window["resets_at"])
         )
+    }
+
+    private static func validPercent(_ value: Any?) -> Double? {
+        guard let value = finiteNumber(value), (0...100).contains(value) else { return nil }
+        return value
     }
 
     static func parseResets(_ value: Any?) -> ClaudeResetInventory? {

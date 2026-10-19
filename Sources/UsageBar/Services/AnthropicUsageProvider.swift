@@ -2,8 +2,8 @@ import Foundation
 
 struct ClaudeQuotaProvider: QuotaProvider {
     let kind = ProviderKind.anthropic
-    var readToken: @Sendable () async -> String? = {
-        await ClaudeOAuthUsageProvider.readAccessTokenWithoutPrompt()
+    var readToken: @Sendable () async throws -> String? = {
+        try await ClaudeOAuthUsageProvider.readAccessTokenWithoutPrompt()
     }
     var loadQuota: @Sendable (String) async throws -> QuotaSnapshot = {
         try await ClaudeOAuthUsageProvider.fetchQuota(accessToken: $0)
@@ -12,7 +12,7 @@ struct ClaudeQuotaProvider: QuotaProvider {
     func fetchQuota() async throws -> QuotaSnapshot {
         // Retry on each refresh, but never launch a CLI that could display its own
         // Keychain dialog. Only the explicit Connect action may allow interaction.
-        guard let token = await readToken() else {
+        guard let token = try await readToken() else {
             throw UsageProviderError.credentialAccessRequired("연결 필요 · ‘다시 연결’을 눌러 Claude 로그인 정보 접근을 허용해 주세요.")
         }
         return try await loadQuota(token)

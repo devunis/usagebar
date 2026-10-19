@@ -51,6 +51,16 @@ struct ClaudeRefreshFailure {
     let message: String
 
     init(error: Error, previous: ProviderState) {
+        if let error = error as? UsageProviderError, case .credentialExpired = error {
+            connectionRequired = false
+            message = "로그인 만료 · Claude Code에서 로그인을 갱신해 주세요. 자동 조회는 계속 재시도합니다."
+            return
+        }
+        if let error = error as? UsageProviderError, case .unauthorized = error {
+            connectionRequired = false
+            message = "조회 권한 확인 필요 · Claude Code 로그인 상태를 확인해 주세요. 키체인 허용을 다시 요청하지 않습니다."
+            return
+        }
         if let error = error as? UsageProviderError, case .credentialAccessRequired = error {
             connectionRequired = true
         } else {
@@ -139,14 +149,15 @@ final class UsageStore: ObservableObject {
         }
     }
     private var timerTask: Task<Void, Never>?
+    private var refreshRecovery: AutomaticRefreshRecovery?
+    private var failedRefreshProviders: Set<ProviderKind> = []
 
     init() {
         launchAtLoginEnabled = UserDefaults.standard.object(
             forKey: Defaults.launchAtLogin
         ) as? Bool ?? true
         launchAtLoginMessage = nil
-        let savedInterval = UserDefaults.standard.integer(forKey: Defaults.refreshInterval)
-        refreshIntervalMinutes = savedInterval == 0 ? 15 : savedInterval
+        refreshIntervalMinutes = UserDefaults.standard.object(forKey: Defaults.refreshInterval) as? Int ?? 15
         if let savedProviders = UserDefaults.standard.stringArray(
             forKey: Defaults.enabledProviders
         ) {
@@ -245,6 +256,10 @@ final class UsageStore: ObservableObject {
         let savedItemCount = UserDefaults.standard.integer(forKey: Defaults.menuBarItemCount)
         menuBarItemCount = savedItemCount == 0 ? 2 : min(max(savedItemCount, 1), 3)
         restartTimer()
+        refreshRecovery = AutomaticRefreshRecovery(
+            isEnabled: { [weak self] in (self?.refreshIntervalMinutes ?? 0) > 0 },
+            refresh: { [weak self] in self?.refreshAfterResume() }
+        )
         applyLaunchAtLoginPreference()
     }
 
@@ -258,6 +273,19 @@ final class UsageStore: ObservableObject {
         }
     }
 
+    private func refreshAfterResume() {
+        guard refreshIntervalMinutes > 0 else { return }
+        restartTimer()
+        for kind in visibleProviders {
+            // Startup/menu refresh may already have succeeded. Avoid duplicate
+            // requests, but retry stale data and any failed first load promptly.
+            guard shouldRefreshAfterResume(
+                state: states[kind] ?? .idle, hasFailure: failedRefreshProviders.contains(kind)
+            ) else { continue }
+            refresh(kind)
+        }
+    }
+
     func connectClaudeBenefits() {
         guard enabledProviders.contains(.anthropic), !refreshingProviders.contains(.anthropic) else { return }
         refreshingProviders.insert(.anthropic)
@@ -266,18 +294,20 @@ final class UsageStore: ObservableObject {
             defer { refreshingProviders.remove(.anthropic) }
             do {
                 states[.anthropic] = .loaded(try await ClaudeOAuthUsageProvider.connectOnUserAction())
+                failedRefreshProviders.remove(.anthropic)
                 claudeConnectionRequired = false
                 claudeRefreshMessage = nil
             } catch {
+                failedRefreshProviders.insert(.anthropic)
                 let notice = ClaudeRefreshFailure(error: error, previous: states[.anthropic] ?? .idle)
                 claudeConnectionRequired = notice.connectionRequired
                 claudeRefreshMessage = notice.message
-                if notice.connectionRequired {
-                    states[.anthropic] = displayStateAfterFailedRefresh(
-                        previous: states[.anthropic] ?? .idle,
-                        failure: .needsConfiguration("Claude에 로그인한 뒤 ‘다시 연결’을 눌러 주세요.")
-                    )
-                }
+                states[.anthropic] = displayStateAfterFailedRefresh(
+                    previous: states[.anthropic] ?? .idle,
+                    failure: notice.connectionRequired
+                        ? .needsConfiguration("Claude에 로그인한 뒤 ‘다시 연결’을 눌러 주세요.")
+                        : .failed(error.localizedDescription)
+                )
             }
         }
     }
@@ -306,12 +336,15 @@ final class UsageStore: ObservableObject {
                 }
                 let snapshot = try await provider.fetchQuota()
                 states[kind] = .loaded(snapshot)
+                failedRefreshProviders.remove(kind)
                 if kind == .anthropic {
                     claudeConnectionRequired = false
                     claudeRefreshMessage = nil
                     claudeBenefitsMessage = nil
                 }
             } catch let error as UsageProviderError {
+                failedRefreshProviders.insert(kind)
+                refreshRecovery?.retryAfterFailure()
                 if kind == .anthropic {
                     let notice = ClaudeRefreshFailure(error: error, previous: previousState)
                     claudeConnectionRequired = notice.connectionRequired
@@ -329,6 +362,8 @@ final class UsageStore: ObservableObject {
                     failure: failure
                 )
             } catch {
+                failedRefreshProviders.insert(kind)
+                refreshRecovery?.retryAfterFailure()
                 if kind == .anthropic {
                     let notice = ClaudeRefreshFailure(error: error, previous: previousState)
                     claudeConnectionRequired = notice.connectionRequired

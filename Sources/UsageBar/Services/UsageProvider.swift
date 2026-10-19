@@ -8,6 +8,7 @@ protocol QuotaProvider: Sendable {
 enum UsageProviderError: LocalizedError {
     case missingCredential(String)
     case credentialAccessRequired(String)
+    case credentialExpired(String)
     case invalidURL
     case invalidResponse
     case unauthorized(String)
@@ -17,7 +18,7 @@ enum UsageProviderError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingCredential(let message), .credentialAccessRequired(let message):
+        case .missingCredential(let message), .credentialAccessRequired(let message), .credentialExpired(let message):
             message
         case .invalidURL:
             "요청 URL을 만들 수 없습니다."

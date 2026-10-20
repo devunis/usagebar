@@ -31,7 +31,9 @@ struct ProviderCard: View {
                 Spacer()
 
                 if kind == .anthropic, needsClaudeConnection {
-                    Button("다시 연결…") { showsClaudeConnectionConfirmation = true }
+                    Button(claudeConnectionRequired ? "다시 연결…" : "추가 정보 연결…") {
+                        showsClaudeConnectionConfirmation = true
+                    }
                         .font(.caption)
                         .disabled(isRefreshing)
                 }
@@ -83,7 +85,7 @@ struct ProviderCard: View {
             Button("로그인 정보 연결") { connectClaudeBenefits() }
             Button("취소", role: .cancel) {}
         } message: {
-            Text("사용량·크레딧·초기화 정보를 조회하기 위해 기존 Claude 로그인 정보 접근을 요청합니다. 지금은 macOS 키체인 허용 창이 나타날 수 있습니다. 자동 새로고침에서는 허용 창 없이 재시도합니다.")
+            Text("일반 사용량은 Claude Code CLI로 우선 조회합니다. 이 선택은 크레딧·초기화 등 추가 정보를 위해 기존 로그인 정보 접근을 별도로 요청하며, macOS 키체인 허용 창이 나타날 수 있습니다. 일반 사용량 조회에는 이 허용이 필수가 아닙니다.")
         }
     }
 

@@ -48,4 +48,8 @@ struct ClaudeAccountBenefits: Equatable, Sendable {
         cloudCredits: nil,
         unavailableMessage: "추가 정보 조회 불가 · Claude 사용량 화면에서 확인해 주세요."
     )
+    static let cliUnavailable = ClaudeAccountBenefits(
+        resets: nil, cloudCredits: nil,
+        unavailableMessage: "일반 한도는 Claude Code로 조회 중입니다. CLI가 제공하지 않는 크레딧·초기화 정보는 Claude 사용량 화면에서 확인해 주세요."
+    )
 }

@@ -2,6 +2,9 @@ import Foundation
 
 struct ClaudeQuotaProvider: QuotaProvider {
     let kind = ProviderKind.anthropic
+    var loadCLI: @Sendable () async throws -> QuotaSnapshot = {
+        try await ClaudeCLIUsageProvider().fetchQuota()
+    }
     var readToken: @Sendable () async throws -> String? = {
         try await ClaudeOAuthUsageProvider.readAccessTokenWithoutPrompt()
     }
@@ -10,10 +13,14 @@ struct ClaudeQuotaProvider: QuotaProvider {
     }
 
     func fetchQuota() async throws -> QuotaSnapshot {
-        // Retry on each refresh, but never launch a CLI that could display its own
-        // Keychain dialog. Only the explicit Connect action may allow interaction.
+        // Let the credential owner handle authentication first. Do not touch the
+        // foreign Keychain item at all when Claude Code supplies usable quotas.
+        do { return try await loadCLI() }
+        catch is CancellationError { throw CancellationError() }
+        catch { /* Missing/old/unavailable CLI: try the noninteractive fallback. */ }
+        try Task.checkCancellation()
         guard let token = try await readToken() else {
-            throw UsageProviderError.credentialAccessRequired("연결 필요 · ‘다시 연결’을 눌러 Claude 로그인 정보 접근을 허용해 주세요.")
+            throw UsageProviderError.credentialAccessRequired("Claude Code CLI 설치·로그인 상태를 확인해 주세요. 기존 로그인 정보를 통한 대체 조회도 사용할 수 없습니다.")
         }
         return try await loadQuota(token)
     }

@@ -11,22 +11,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 enum UsageBarEntry {
     @MainActor
     static func main() async {
-        if CommandLine.arguments.contains("--diagnose-claude-usage") {
+        let cliOnly = CommandLine.arguments.contains("--diagnose-claude-cli")
+        if cliOnly || CommandLine.arguments.contains("--diagnose-claude-usage") {
             // Same signed app and existing consent; never interactive. This report
             // deliberately excludes tokens, account IDs and raw server responses.
             do {
-                let credential = await ClaudeOAuthUsageProvider.readCredentialWithoutPrompt()
-                if case .keychainUnavailable(let status) = credential {
-                    print("{\"status\":\"keychain_unavailable\",\"code\":\(status)}")
-                    return
-                }
-                guard let token = try credential.tokenForUsage() else {
-                    print("{\"status\":\"credential_access_unavailable\"}")
-                    return
-                }
-                let snapshot = try await ClaudeOAuthUsageProvider.fetchQuota(accessToken: token)
+                let snapshot = cliOnly
+                    ? try await ClaudeCLIUsageProvider().fetchQuota()
+                    : try await ClaudeQuotaProvider().fetchQuota()
                 let report: [String: Any] = [
                     "status": "ok",
+                    "mode": cliOnly ? "cli-only" : "cli-first",
                     "windows": snapshot.windows.map { ["title": $0.title, "usedPercent": $0.usedPercent] as [String: Any] }
                 ]
                 let data = try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys])

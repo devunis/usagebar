@@ -66,6 +66,7 @@ final class ClaudeCredentialRetryTests: XCTestCase {
     func testCredentialDenialIsRetriedAndCanRecoverWithoutCLI() async throws {
         let probe = RetryProbe(denyFirstRead: true, failFirstRequest: false)
         let provider = ClaudeQuotaProvider(
+            loadCLI: { throw UsageProviderError.unsupported("fixture: CLI unavailable") },
             readToken: { await probe.read() },
             loadQuota: { try await probe.fetch($0) }
         )
@@ -85,6 +86,7 @@ final class ClaudeCredentialRetryTests: XCTestCase {
     func testNetworkFailureRemainsRetryableNotCredentialFailure() async throws {
         let probe = RetryProbe(denyFirstRead: false, failFirstRequest: true)
         let provider = ClaudeQuotaProvider(
+            loadCLI: { throw UsageProviderError.unsupported("fixture: CLI unavailable") },
             readToken: { await probe.read() },
             loadQuota: { try await probe.fetch($0) }
         )

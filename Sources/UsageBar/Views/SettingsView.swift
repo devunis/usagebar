@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var store: UsageStore
+    @EnvironmentObject private var cliSetup: CLISetupStore
 
     var body: some View {
         Form {
@@ -13,6 +14,10 @@ struct SettingsView: View {
                 providerToggle(.codex, command: "codex login")
                 providerToggle(.anthropic, command: "claude auth login")
                 providerToggle(.gemini, command: "gemini")
+
+                Button("CLI 설치·로그인 안내…") { cliSetup.show(using: store) }
+                Text("설치 여부 확인, 공식 설치 안내와 로그인 명령어를 볼 수 있습니다.")
+                    .font(.caption).foregroundStyle(.secondary)
 
                 HStack {
                     Button("모두 켜기") {

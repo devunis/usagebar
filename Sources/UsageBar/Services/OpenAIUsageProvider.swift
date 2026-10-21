@@ -55,11 +55,7 @@ struct CodexQuotaProvider: QuotaProvider {
         let input = Pipe()
         let output = Pipe()
         let errors = Pipe()
-        process.executableURL = try executableURL(named: "codex", candidates: [
-            "~/.local/bin/codex",
-            "/opt/homebrew/bin/codex",
-            "/usr/local/bin/codex"
-        ])
+        process.executableURL = try CLITool.codex.resolveExecutable()
         process.arguments = ["app-server"]
         try configureCLIProcess(process, for: "codex")
         process.standardInput = input

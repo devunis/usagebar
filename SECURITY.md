@@ -3,6 +3,7 @@
 ## Credential handling
 
 - UsageBar는 API 키 입력을 요구하거나 별도로 저장하지 않습니다.
+- 설치 안내의 자동 감지는 실행 파일 존재 여부만 검사합니다. 설치 명령어는 화면 표시/명시적 복사만 가능하며, 터미널 열기는 명령어를 주입하거나 실행하지 않습니다. 원격 설치 스크립트를 앱에서 다운로드/실행하거나 Homebrew·CLI를 자동 설치하지 않습니다. 공식 문서 링크와 설치 스크립트 URL은 고정된 공급자 주소이며 로그인은 공급자의 공식 CLI에서 사용자가 직접 진행합니다.
 - Codex 한도는 로컬 `codex app-server` 프로세스를 통해 조회합니다.
 - Claude는 공식 CLI의 구조화된 `get_usage` 요청으로 먼저 조회합니다. 성공하면 UsageBar는 Claude 자격 증명을 읽지 않습니다. 조회용 CLI는 전용 폴더에서 `--safe-mode`, `--strict-mcp-config`, 도구/훅/Remote Control/세션 저장 비활성화 상태로 실행합니다. 사용자 프롬프트나 모델 턴 없이 initialize/get_usage만 보내고, `skip_behaviors: true`로 대화 내역 분석을 생략합니다. 응답 크기·시간 제한과 취소 처리가 있으며, 해당 자식 프로세스만 종료합니다. 원시 stderr는 저장/출력하지 않습니다. Claude Code 자체가 로그인과 토큰 갱신을 관리하며, 그 프로세스에 적용되는 macOS 인증 요구는 UsageBar가 우회하지 않습니다.
 - CLI가 없거나 조회가 실패할 때만 기존 OAuth 자격 증명을 읽기 전용으로 시도합니다. 대체 조회는 `LAContext.interactionNotAllowed = true`, `kSecUseAuthenticationUIFail`, `SecKeychainSetUserInteractionAllowed(false)`로 구형 키체인 허용창까지 차단합니다. 전역 정책의 변경·조회·복원은 잠금으로 직렬화하며 차단 설정에 실패하면 읽지 않습니다. 사용자가 추가 정보 연결/다시 연결을 직접 누르고 확인한 경우에만 UsageBar의 키체인 인증 UI를 허용합니다. UsageBar는 토큰을 저장·수정하거나 갱신 토큰을 교환하지 않습니다.

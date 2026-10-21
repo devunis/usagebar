@@ -13,6 +13,7 @@ private struct ProviderContentHeightKey: PreferenceKey {
 
 struct MenuContentView: View {
     @EnvironmentObject private var store: UsageStore
+    @EnvironmentObject private var cliSetup: CLISetupStore
     @Environment(\.openSettings) private var openSettings
     @MenuHeightState private var providerContentHeight: CGFloat = 0
 
@@ -102,6 +103,9 @@ struct MenuContentView: View {
                 }
                 .buttonStyle(.plain)
 
+                Button("설치·로그인 안내") { cliSetup.show(using: store) }
+                    .buttonStyle(.plain)
+
                 Spacer()
 
                 Button("종료") {
@@ -131,6 +135,7 @@ struct MenuContentView: View {
             let settingsWindows = NSApp.windows.filter {
                 $0.isVisible &&
                     $0.styleMask.contains(.titled) &&
+                    $0.identifier?.rawValue != "UsageBar.CLISetup" &&
                     !($0 is NSPanel)
             }
             if let settingsWindow = settingsWindows.first {

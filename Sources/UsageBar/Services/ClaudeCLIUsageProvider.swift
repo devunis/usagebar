@@ -39,9 +39,7 @@ struct ClaudeCLIUsageProvider: Sendable {
     private func fetchBlocking(cancellation: ClaudeProbeCancellation) throws -> QuotaSnapshot {
         try cancellation.check()
         let process = Process()
-        process.executableURL = try executable ?? executableURL(named: "claude", candidates: [
-            "~/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"
-        ])
+        process.executableURL = try executable ?? CLITool.claude.resolveExecutable()
         process.arguments = Self.arguments
         if let workingDirectory { process.currentDirectoryURL = workingDirectory }
         else { try configureCLIProcess(process, for: "claude") }

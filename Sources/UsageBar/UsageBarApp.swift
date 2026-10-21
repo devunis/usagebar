@@ -45,15 +45,18 @@ enum UsageBarEntry {
 struct UsageBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = UsageStore()
+    @StateObject private var cliSetup = CLISetupStore()
 
     var body: some Scene {
         MenuBarExtra {
             MenuContentView()
                 .environmentObject(store)
+                .environmentObject(cliSetup)
         } label: {
             MenuBarStatusLabel(store: store)
                 .task {
                     store.refreshAll()
+                    cliSetup.offerOnFirstLaunch(using: store)
                 }
         }
         .menuBarExtraStyle(.window)
@@ -61,6 +64,7 @@ struct UsageBarApp: App {
         Settings {
             SettingsView()
                 .environmentObject(store)
+                .environmentObject(cliSetup)
         }
     }
 }

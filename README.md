@@ -4,6 +4,8 @@ ChatGPT/Codex, Claude, Gemini 구독 계정의 현재 한도와 리셋 시간을
 
 UsageBar 앱 아이콘은 청록·코랄·보라 사용량 막대를 하나의 게이지로 묶은 전용 디자인을 사용합니다.
 
+Windows 초기 트레이 버전은 별도 `codex/windows-tray` 브랜치의 [`Windows/`](Windows/README.md)에서 개발합니다. 네이티브 .NET 앱이며 macOS Swift 앱은 그대로 유지합니다. 기능 범위·실행 방법·검증 제한은 Windows README를 확인해 주세요.
+
 각 서비스 카드는 실제 OpenAI, Claude, Gemini 벡터 심볼을 사용합니다. 상표는 각 소유자에게 있으며 UsageBar와의 제휴나 보증을 의미하지 않습니다. 아이콘 출처와 라이선스는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인해 주세요.
 
 ## 지원 범위

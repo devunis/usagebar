@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>UsageBar</AssemblyName>
+    <Version>0.1.0</Version>
+    <StartupObject>UsageBar.Windows.Program</StartupObject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../UsageBar.Core/UsageBar.Core.csproj" />
+    <Resource Include="../../Resources/AppIcon.png" Link="Assets/AppIcon.png" />
+    <Resource Include="../../Resources/BrandMarks/openai.svg" Link="Assets/openai.svg" />
+    <Resource Include="../../Resources/BrandMarks/claude.svg" Link="Assets/claude.svg" />
+    <Content Include="../../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

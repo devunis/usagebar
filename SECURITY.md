@@ -15,6 +15,8 @@
 
 ## Local code signing
 
+Windows Preview는 CLI 전용이며 macOS 키체인 경로를 사용하지 않습니다. Windows Credential Manager·자격 증명 파일·브라우저 쿠키를 직접 읽지 않고, API 키 입력·토큰 저장도 하지 않습니다. CLI 요청은 한도 조회뿐이며 응답/시간 제한과 해당 자식 프로세스만 종료하는 처리를 적용합니다. 로그인 자동 실행은 사용자가 켤 때만 현재 사용자 Run 키의 UsageBar 항목을 변경합니다. 배포 ZIP은 아직 Windows 코드 서명이 없으며, 보안 경고를 우회하거나 Defender/SmartScreen을 끄도록 요구하지 않습니다. 세부 범위는 `Windows/README.md`를 참조하세요.
+
 - 로컬 설치에는 사용자 키체인의 `UsageBar Local Signing` 자체 서명 인증서와 동일한 앱 식별자 `com.usagebar.app`을 재사용합니다. DR은 유지되지만 Apple Team ID가 없는 자체 서명은 키체인의 별도 partition 검사에서 코드 해시로 분류되므로, 업데이트 후 ‘항상 허용’ 유지까지 보장하지 않습니다. Claude 정상 조회는 CLI를 통해 이 외부 키체인 항목에 대한 직접 의존을 피합니다. 기존 Claude 항목의 ACL/partition 목록을 수정하거나 우회하지 않습니다.
 - `scripts/setup-local-signing.sh`는 사용자가 명시적으로 실행할 때만 인증서를 생성하며 기존 인증서가 있으면 재생성하지 않습니다. 생성한 개인 키는 추출 불가로 가져오며 서명 접근은 `/usr/bin/codesign`에만 허용합니다. 시스템/사용자 신뢰 루트나 Claude 자격 증명 ACL은 변경하지 않습니다.
 - 생성 중 임시 개인 키/PKCS#12 파일은 소유자만 접근 가능한 임시 폴더에 두고 종료 시 제거합니다. 키와 인증서를 저장소에 넣지 않습니다.

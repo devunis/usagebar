@@ -4,3 +4,6 @@
 *.xcodeproj/
 DerivedData/
 UsageBar.app/
+Windows/**/bin/
+Windows/**/obj/
+Windows/artifacts/

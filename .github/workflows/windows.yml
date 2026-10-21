@@ -1,0 +1,49 @@
+name: Windows Preview
+
+on:
+  push:
+    branches: ["codex/windows-tray"]
+    paths: ["Windows/**", "Resources/**", ".github/workflows/windows.yml"]
+  pull_request:
+    paths: ["Windows/**", "Resources/**", ".github/workflows/windows.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Core parsers, process transport and recovery specifications
+        run: dotnet run --project Windows/UsageBar.Core.Specs/UsageBar.Core.Specs.csproj -c Release
+      - name: Build native Windows UI
+        run: dotnet build Windows/UsageBar.Windows/UsageBar.Windows.csproj -c Release
+      - name: Windows UI smoke test (fixtures only)
+        run: dotnet Windows/UsageBar.Windows/bin/Release/net10.0-windows/UsageBar.dll --smoke-test Windows/artifacts/smoke
+      - name: Publish portable Windows x64 app with bundled runtime
+        shell: pwsh
+        run: ./Windows/build.ps1 -Runtime win-x64
+      - name: Upload preview ZIP and SHA256
+        uses: actions/upload-artifact@v4
+        with:
+          name: UsageBar-win-x64-preview
+          path: |
+            Windows/artifacts/UsageBar-win-x64-preview.zip
+            Windows/artifacts/UsageBar-win-x64-preview.zip.sha256
+          if-no-files-found: error
+      - name: Upload Windows UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UsageBar-windows-smoke
+          path: Windows/artifacts/smoke
+          if-no-files-found: ignore

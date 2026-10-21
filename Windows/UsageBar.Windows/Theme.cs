@@ -22,7 +22,8 @@ internal static class Theme
     public static void Install(Application app)
     {
         var text = new Style(typeof(TextBlock));
-        text.Setters.Add(new Setter(TextBlock.ForegroundProperty, Brushes.White));
+        // Do not force white on implicit TextBlocks: button/ComboBox content must
+        // inherit its control's dark foreground on the native light surface.
         text.Setters.Add(new Setter(TextBlock.TextWrappingProperty, TextWrapping.Wrap));
         app.Resources[typeof(TextBlock)] = text;
         var button = new Style(typeof(Button));

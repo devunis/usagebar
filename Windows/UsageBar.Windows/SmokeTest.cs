@@ -1,9 +1,11 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -37,6 +39,10 @@ internal static class SmokeTest
                 window.ShowPage(page);
                 app.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
+                foreach (var button in Descendants(window).OfType<Button>().Where(button => button.IsEnabled))
+                    foreach (var text in Descendants(button).OfType<TextBlock>())
+                        if (text.Foreground is SolidColorBrush color && color.Color.R > 200 && color.Color.G > 200 && color.Color.B > 200)
+                            throw new InvalidOperationException("Light button text has insufficient contrast");
                 if (window.ActualWidth < 400 || window.ActualHeight < 400) throw new InvalidOperationException("Window layout collapsed");
                 var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 bitmap.Render(window);
@@ -55,6 +61,16 @@ internal static class SmokeTest
             File.WriteAllText(Path.Combine(Path.GetTempPath(), "UsageBar-smoke-failed.txt"), "Windows UI smoke test failed.");
             app.Shutdown(1);
             return 1;
+        }
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
         }
     }
 

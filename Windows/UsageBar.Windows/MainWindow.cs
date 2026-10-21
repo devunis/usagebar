@@ -86,12 +86,12 @@ internal sealed class MainWindow : Window
                 if (!string.IsNullOrWhiteSpace(snapshot.Plan)) body.Children.Add(Text(snapshot.Plan.ToUpperInvariant(), 11, Theme.Muted));
                 foreach (var window in snapshot.Windows)
                 {
-                    var labels = new DockPanel { Margin = new Thickness(0, 15, 0, 5) };
+                    var labels = new DockPanel { Margin = new Thickness(0, 8, 0, 3) };
                     var percent = Text($"{window.UsedPercent:0.#}% 사용", 13, Theme.ProviderBrush(provider));
                     DockPanel.SetDock(percent, Dock.Right); labels.Children.Add(percent);
                     labels.Children.Add(Text(window.Title, 14, bold: true)); body.Children.Add(labels);
                     body.Children.Add(new ProgressBar { Minimum = 0, Maximum = 100, Value = window.UsedPercent,
-                        Height = 8, Foreground = Theme.ProviderBrush(provider), Background = Theme.Brush("#344154"), BorderThickness = new Thickness(0) });
+                        Height = 6, Foreground = Theme.ProviderBrush(provider), Background = Theme.Brush("#344154"), BorderThickness = new Thickness(0) });
                     if (window.ResetsAt is { } reset)
                         body.Children.Add(Text($"재설정 {reset.LocalDateTime:g}", 11, Theme.Muted));
                 }
@@ -195,7 +195,7 @@ internal sealed class MainWindow : Window
     }
     private static TextBlock Text(string text, double size = 13, Brush? foreground = null, bool bold = false) =>
         new() { Text = text, FontSize = size, Foreground = foreground ?? Brushes.White,
-            FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal, Margin = new Thickness(0, 5, 0, 5) };
+            FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal, Margin = new Thickness(0, 3, 0, 3) };
     private static Button Button(string title, Action action)
     { var button = new Button { Content = title, HorizontalAlignment = HorizontalAlignment.Left }; button.Click += (_, _) => action(); return button; }
     private static StackPanel Row() => new() { Orientation = Orientation.Horizontal };

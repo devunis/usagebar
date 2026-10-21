@@ -67,7 +67,8 @@ internal sealed class TrayController : IDisposable
         var missing = Enum.GetValues<Provider>().Any(provider => Tracker.Settings.Enabled(provider) && CliLocator.Find(provider) is null);
         if (!Tracker.Settings.HasSeenSetup && missing) Show("setup");
         SavePreferences(Tracker.Settings with { HasSeenSetup = true }, changeStartup: false);
-        _ = Tracker.RefreshAllAsync();
+        // Start after Application.Run installs the UI synchronization context.
+        app.Dispatcher.InvokeAsync(async () => await Tracker.RefreshAllAsync());
     }
 
     public void Show(string page)
@@ -106,6 +107,8 @@ internal sealed class TrayController : IDisposable
     private void OnChanged()
     {
         if (disposed) return;
+        if (!app.Dispatcher.CheckAccess())
+        { app.Dispatcher.InvokeAsync(OnChanged); return; }
         Window.RefreshUsage();
         var summaries = Enum.GetValues<Provider>().Where(Tracker.Settings.Enabled).Select(provider =>
         {
@@ -197,7 +200,7 @@ internal static class StartupRegistration
     public static bool IsEnabled()
     {
         try { using var key = Registry.CurrentUser.OpenSubKey(KeyPath); return key?.GetValue(Name) as string == Command; }
-        catch (System.Security.SecurityException) { return false; }
+        catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return false; }
     }
     public static void SetEnabled(bool enabled)
     {

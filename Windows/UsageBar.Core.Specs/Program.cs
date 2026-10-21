@@ -157,6 +157,16 @@ internal static class Program
                 completion.SetResult(ParseCodex(CodexFixture)); await Task.WhenAll(first, second);
                 Equal(1, calls);
             }),
+            ("Concurrent completions do not corrupt provider request tracking", async () =>
+            {
+                using var tracker = new UsageTracker(async (provider, cancellation) =>
+                {
+                    await Task.Delay(2, cancellation).ConfigureAwait(false);
+                    return provider == Provider.Codex ? ParseCodex(CodexFixture) : ParseClaude(ClaudeFixture);
+                });
+                for (var index = 0; index < 20; index++) await tracker.RefreshAllAsync();
+                True(tracker.States.Values.All(state => state.Snapshot != null && !state.Refreshing && state.Error == null));
+            }),
             ("Disabling provider cancels pending fetch and discards result", async () =>
             {
                 var completion = new TaskCompletionSource<QuotaSnapshot>(); CancellationToken seen = default;

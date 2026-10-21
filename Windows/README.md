@@ -51,6 +51,8 @@ dotnet Windows/UsageBar.Windows/bin/Release/net10.0-windows/UsageBar.dll --smoke
 
 Core.Specs는 실행 가능한 검증 프로그램이며 실패 시 0이 아닌 코드로 종료합니다. 실제 공급자/계정 대신 자식 fixture 프로세스로 JSONL 초기화·순서·시간 초과·취소·stderr drain·크기 제한을 검사합니다. `--smoke-test`는 Windows에서 고정 fixture로 UI·로고·트레이 렌더링과 창 닫기/숨김을 검사하고 PNG를 만듭니다. 계정 조회·레지스트리 변경·설정 저장·설치·브라우저 실행은 하지 않습니다.
 
+Windows CI는 개발용 DLL뿐 아니라 최종 self-contained `UsageBar.exe`도 직접 실행하여 포함된 런타임·로고 리소스로 같은 화면 검사가 통과하는지 확인한 뒤 ZIP을 업로드합니다.
+
 Mac/Linux에서도 Core.Specs 실행과 `EnableWindowsTargeting`을 이용한 UI 교차 빌드는 가능하지만 Windows UI의 실제 실행 검증과 동일하지 않습니다. Windows CI의 성공도 실제 사용자의 CLI 로그인·절전/트레이·자동 실행 동작 전체를 검증한 것으로 간주하지 않습니다.
 
 ## 공식 규격 / 자산

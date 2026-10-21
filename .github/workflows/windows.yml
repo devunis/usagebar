@@ -32,6 +32,13 @@ jobs:
       - name: Publish portable Windows x64 app with bundled runtime
         shell: pwsh
         run: ./Windows/build.ps1 -Runtime win-x64
+      - name: Launch packaged EXE and verify embedded resources
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'Windows/artifacts/UsageBar-win-x64/UsageBar.exe').Path
+          $output = Join-Path $PWD 'Windows/artifacts/smoke/portable'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test', "`"$output`"") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Packaged EXE smoke test failed ($($process.ExitCode))" }
       - name: Upload preview ZIP and SHA256
         uses: actions/upload-artifact@v4
         with:
